@@ -1,0 +1,31 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: image-gallery:latest
+    ports:
+      - "8080:8000"
+    environment:
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: "*"
+      DJANGO_LOG_LEVEL: "INFO"
+      GALLERY_CACHE_TTL: "300"
+      GALLERY_CACHE_MAX_ENTRIES: "1000"
+      GALLERY_CACHE_CULL_FREQUENCY: "3"
+      GALLERY_DEFAULT_SIZE: "medium"
+      GALLERY_DEFAULT_PAGE_SIZE: "10"
+      GALLERY_UPSTREAM_BASE_URL: "https://picsum.dev"
+      GALLERY_UPSTREAM_TIMEOUT: "5.0"
+      GALLERY_UPSTREAM_RETRIES: "2"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped

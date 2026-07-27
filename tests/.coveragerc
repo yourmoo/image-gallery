@@ -1,0 +1,21 @@
+# Coverage configuration for the image gallery test suite.
+# Paths are relative to the directory coverage runs from (the project root),
+# so `source` points at the package as seen from there.
+#
+# Used via:  pytest -c tests/pytest.ini --cov-config=tests/.coveragerc
+
+[run]
+source = image_gallery
+# Keep the raw coverage database inside tests/reports/ rather than letting it
+# land in the project root; coverage resolves this relative to the working
+# directory, not to this file.
+data_file = tests/reports/.coverage
+omit =
+    */migrations/*
+    */manage.py
+    */wsgi.py
+    */asgi.py
+
+[report]
+fail_under = 70
+show_missing = true
