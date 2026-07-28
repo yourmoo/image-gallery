@@ -11,7 +11,7 @@
  */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light; /* light only — no dark override */
 
   /* --- Colour: light --- */
   --bg: #ffffff;
@@ -87,33 +87,6 @@
   --cell-small: 140px;
   --cell-medium: 200px;
   --cell-large: 280px;
-}
-
-/* --- Colour: dark ---
- * Only colour tokens are redefined. Spacing, type, and geometry are
- * theme-independent by design. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161a;
-    --surface: #1a1d22;
-    --surface-raised: #21252b;
-    --fg: #e8e8e8;
-    --muted: #a0a0a0;
-    --border: #2e3238;
-    --border-strong: #454b53;
-
-    --accent: #6fa8e8;
-    --accent-fg: #10141a;
-    --accent-subtle: #1b2937;
-
-    --notice-bg: #2a2415;
-    --notice-fg: #e8d9a8;
-    --notice-border: #4d4224;
-
-    --placeholder: #23272d;
-
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.3);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

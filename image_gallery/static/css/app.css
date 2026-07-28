@@ -4,8 +4,9 @@
  * spacing, or sizes. Components map one-to-one onto the control inventory in
  * docs/ui/ui-notes.md; see docs/ui/design-system.md for usage and markup.
  *
- * Server-side rendered: state changes are form submissions and navigations.
- * Nothing below requires JavaScript to function.
+ * Client-side rendered (docs/adr/0002-client-side-rendering.md): the shell is
+ * served by Django and the gallery is drawn by JavaScript from the JSON API.
+ * State changes are fetches plus history.pushState, not form submissions.
  */
 
 @import url("tokens.css");
