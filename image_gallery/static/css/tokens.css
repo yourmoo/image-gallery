@@ -1,0 +1,124 @@
+/* Design tokens — the single source of every value used by app.css.
+ *
+ * Nothing here styles an element. These are the primitives: colour, spacing,
+ * type, radii, and the two gallery-specific scales (image sizes and grid
+ * geometry). Components in app.css reference these and never hardcode a value.
+ *
+ * The four properties the baseline already shipped — --bg, --fg, --muted,
+ * --border — are preserved by name so existing templates keep working.
+ *
+ * Documented in docs/ui/design-system.md.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- Colour: light --- */
+  --bg: #ffffff;
+  --surface: #f7f8f9;
+  --surface-raised: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #5a5a5a;
+  --border: #d8d8d8;
+  --border-strong: #b4b4b4;
+
+  --accent: #1f5fa8;
+  --accent-fg: #ffffff;
+  --accent-subtle: #e8f0fa;
+
+  /* Notices are informational, never alarming: the gallery renders beneath
+   * them. Warm rather than red, per docs/ui/ui-notes.md. */
+  --notice-bg: #fdf6e3;
+  --notice-fg: #6b5310;
+  --notice-border: #e3d08a;
+
+  /* Placeholder shown while a proxied image loads. */
+  --placeholder: #e9ebed;
+
+  /* --- Spacing: 4px base, geometric --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* --- Type --- */
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", monospace;
+  --text-sm: 0.8125rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --leading: 1.5;
+  --leading-tight: 1.25;
+
+  /* --- Shape --- */
+  --radius-sm: 3px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --border-width: 1px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* --- Elevation: restrained, one step only --- */
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.04);
+
+  /* --- Motion. Durations resolve to 0 under reduced-motion (below). --- */
+  --duration-fast: 120ms;
+  --duration: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* --- Layout --- */
+  --measure: 70rem;
+  --header-height: 3.5rem;
+
+  /* --- Gallery: image render sizes ---
+   * The named sizes of F3.1. These are the CSS display dimensions; the proxy
+   * serves matching pixel dimensions. Kept as tokens so "large" means one
+   * thing across the grid, the detail view, and the docs. */
+  --image-small: 200px;
+  --image-medium: 400px;
+  --image-large: 800px;
+
+  /* Minimum grid cell per named size. Drives repeat(auto-fill, minmax(...)),
+   * so column count follows viewport width rather than breakpoints. */
+  --cell-small: 140px;
+  --cell-medium: 200px;
+  --cell-large: 280px;
+}
+
+/* --- Colour: dark ---
+ * Only colour tokens are redefined. Spacing, type, and geometry are
+ * theme-independent by design. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --surface: #1a1d22;
+    --surface-raised: #21252b;
+    --fg: #e8e8e8;
+    --muted: #a0a0a0;
+    --border: #2e3238;
+    --border-strong: #454b53;
+
+    --accent: #6fa8e8;
+    --accent-fg: #10141a;
+    --accent-subtle: #1b2937;
+
+    --notice-bg: #2a2415;
+    --notice-fg: #e8d9a8;
+    --notice-border: #4d4224;
+
+    --placeholder: #23272d;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration: 0ms;
+  }
+}

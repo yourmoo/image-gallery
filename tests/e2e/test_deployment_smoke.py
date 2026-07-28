@@ -1,7 +1,16 @@
-"""End-to-end browser tests for the health endpoint and landing page.
+"""Deployment smoke checks: does the container serve a working page?
 
-These run against an already-running server (compose or `runserver`), not the
-Django test client, so they are marked `e2e` and excluded from the default run:
+This tier is deliberately thin. Behaviour — pagination, filters, validation —
+is verified by the BDD suite through the Django test client, which is faster and
+needs no server. Anything that could pass there does not belong here.
+
+What justifies a browser: **the test client never fetches subresources.** It
+renders templates in-process, so a broken `{% static %}` path or a mis-collected
+asset leaves the DOM intact and the test green while the page is broken for a
+user. See tests/README.md for the incident that established this.
+
+These run against an already-running server (compose or `runserver`), so they
+are marked `e2e` and excluded from the default run:
 
     pytest -c tests/pytest.ini -m e2e
 """

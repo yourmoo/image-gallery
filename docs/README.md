@@ -3,8 +3,17 @@
 Project documentation that is too long or too specialised for the root
 [README](../README.md).
 
-Nothing has been moved here yet — the root README is still the single overview,
-and all testing documentation lives in [tests/README.md](../tests/README.md).
+The root README is still the overview, and all testing documentation lives in
+[tests/README.md](../tests/README.md).
+
+## Contents
+
+| File | Topic |
+| --- | --- |
+| [api-contract.md](api-contract.md) | Endpoints, parameters, and error behaviour — **test-enforced**, so it cannot drift |
+| [core-features.md](core-features.md) | The 22 Core Requirements as features F1–F5, and the decisions shaping them |
+| [ui/](ui/) | The visual layer — design brief, tokens, and components |
+| [adr/](adr/) | Architecture decision records — one file per decision, with alternatives rejected |
 
 ## What belongs here
 
@@ -13,7 +22,6 @@ the assignment brief requires:
 
 | Topic | Belongs here when |
 | --- | --- |
-| API contract | Endpoints, accepted parameters, and error behaviour are defined |
 | Design decisions | The rationale outgrows the root README's summary |
 | Performance notes | There are targets, a measurement method, and observed numbers |
 | Configuration reference | The env-var table needs more than one line per entry |
@@ -32,3 +40,7 @@ the assignment brief requires:
 One topic per file, lowercase kebab-case names (`api-contract.md`). Add a row
 to the table above when you add a file, so this stays an index rather than a
 directory listing.
+
+A topic gets its own subdirectory once it needs more than one file — `adr/` and
+`ui/` each carry their own README indexing what is inside, so the table above
+lists the directory rather than growing a row per file.

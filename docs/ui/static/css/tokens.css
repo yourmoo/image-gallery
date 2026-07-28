@@ -1,0 +1,88 @@
+/* tokens.css — every primitive value. Styles nothing.
+   Reference implementation of design-system.md §2. */
+
+:root {
+  color-scheme: light; /* light only — no dark override */
+
+  /* Colour */
+  --bg: #FDFDFC;
+  --surface: #F2F2EF;
+  --surface-raised: #FFFFFF;
+  --fg: #1B1B19;
+  --muted: #6E6E68;
+  --border: #E2E2DD;
+  --border-strong: #D8D8D2;
+
+  --accent: #3B6EA8;
+  --accent-fg: #FFFFFF;
+  --accent-subtle: #EDF2F9;
+  --accent-ink: #2C5385;
+
+  --notice-bg: #F5F8FC;
+  --notice-border: #DFE6F0;
+
+  --warn: #B08442;
+  --warn-bg: #FCF8F0;
+  --warn-border: #EADFC8;
+
+  --placeholder: #F2F2EF;
+  --placeholder-alt: #EAEAE6;
+
+  /* Spacing — 4px base */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 56px;
+
+  /* Type */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 24px;
+  --text-xl: 44px;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+
+  /* Shape & elevation */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+
+  /* Motion */
+  --duration: 160ms;
+  --ease: ease-out;
+
+  /* Gallery scales */
+  --image-small: 200px;
+  --image-medium: 400px;
+  --image-large: 800px;
+
+  --cell-small: 140px;
+  --cell-medium: 200px;
+  --cell-large: 280px;
+  --cell-custom: var(--cell-medium); /* JS overrides inline for WxH sizes */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration: 0ms; }
+}
+
+/* At 50 images on a phone, dimensions matter more than column count. */
+@media (max-width: 480px) {
+  :root {
+    --cell-small: 110px;
+    --cell-medium: 110px;
+    --cell-large: 140px;
+  }
+}

@@ -26,6 +26,9 @@ dev = [
     "playwright>=1.44",
     "pytest-playwright>=0.5",
     "requests-mock>=1.12",
+    # Self-contained HTML test reports. Behavioural coverage is reported by
+    # scenario rather than by line, so the report is the primary artifact.
+    "pytest-html>=4.1",
 ]
 
 [project.scripts]

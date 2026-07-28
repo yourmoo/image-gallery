@@ -78,15 +78,34 @@ WSGI_APPLICATION = "image_gallery.wsgi.application"
 # No relational store: see README "State model choice and rationale".
 DATABASES = {}
 
+# Freshness and retention are separate windows. TTL is how long a cached image
+# is preferred over a new fetch; RETENTION is how long the bytes stay available
+# as a fallback when upstream fails. Django's cache API cannot return an expired
+# entry, so CACHES["TIMEOUT"] is set to RETENTION and freshness is compared
+# against a timestamp stored in the value. RETENTION must exceed TTL or the
+# stale-fallback tier can never fire.
+# See docs/adr/0012-resilience-strategy.md.
 GALLERY_CACHE_TTL = _env_int("GALLERY_CACHE_TTL", 300)
-GALLERY_CACHE_MAX_ENTRIES = _env_int("GALLERY_CACHE_MAX_ENTRIES", 1000)
+GALLERY_CACHE_RETENTION = _env_int("GALLERY_CACHE_RETENTION", 3600)
+
+# MAX_ENTRIES is a byte budget in disguise: LocMemCache counts entries, but the
+# entries here are image bytes. The cap is derived from a target per-worker
+# footprint divided by the worst-case entry size, so changing it is a memory
+# decision. Measured medians: small ~7.8 KB, medium ~20.8 KB, large ~59.4 KB,
+# and ~182 KB at GALLERY_MAX_DIMENSION. At 300 entries that is ~7 MB for typical
+# medium browsing, ~20 MB large-heavy, and ~60 MB in the pathological
+# all-at-ceiling case — doubled across two gunicorn workers.
+# See docs/adr/0011-cache-sizing.md.
+GALLERY_CACHE_MAX_ENTRIES = _env_int("GALLERY_CACHE_MAX_ENTRIES", 300)
 GALLERY_CACHE_CULL_FREQUENCY = _env_int("GALLERY_CACHE_CULL_FREQUENCY", 3)
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "image-gallery",
-        "TIMEOUT": GALLERY_CACHE_TTL,
+        # Retention, not TTL: entries must outlive their freshness window so
+        # they remain available as a fallback. Freshness is enforced in code.
+        "TIMEOUT": GALLERY_CACHE_RETENTION,
         "OPTIONS": {
             "MAX_ENTRIES": GALLERY_CACHE_MAX_ENTRIES,
             "CULL_FREQUENCY": GALLERY_CACHE_CULL_FREQUENCY,
@@ -143,6 +162,35 @@ GALLERY_UPSTREAM_BASE_URL = os.environ.get(
 )
 GALLERY_DEFAULT_SIZE = os.environ.get("GALLERY_DEFAULT_SIZE", "medium")
 GALLERY_DEFAULT_PAGE_SIZE = _env_int("GALLERY_DEFAULT_PAGE_SIZE", 10)
+GALLERY_CATALOGUE_SIZE = _env_int("GALLERY_CATALOGUE_SIZE", 100)
+
+# The allow-list offered by the per-page count control (brief line 155). Kept as
+# a setting rather than a literal so validation, the UI control, and the
+# generated API description all read the same list.
+GALLERY_PAGE_SIZES = tuple(
+    int(n) for n in os.environ.get("GALLERY_PAGE_SIZES", "10,20,50").split(",") if n.strip()
+)
+
+# Named sizes resolve to pixel dimensions here rather than in code, so a
+# deployment can retune what "large" means. Parsed as WxH by the service layer.
+GALLERY_SIZE_SMALL = os.environ.get("GALLERY_SIZE_SMALL", "200x200")
+GALLERY_SIZE_MEDIUM = os.environ.get("GALLERY_SIZE_MEDIUM", "400x400")
+GALLERY_SIZE_LARGE = os.environ.get("GALLERY_SIZE_LARGE", "800x800")
+
+# Bounds every dimension, named or custom. picsum does not enforce its own
+# documented 5000px limit — 6000x6000 returns 200 with ~970 KB — so this ceiling
+# is the only thing bounding upstream traffic. The floor exists because 0x0 also
+# returns 200, with a useless 693-byte image.
+# See docs/adr/0010-configurable-and-custom-sizes.md.
+GALLERY_MAX_DIMENSION = _env_int("GALLERY_MAX_DIMENSION", 1600)
+GALLERY_MIN_DIMENSION = _env_int("GALLERY_MIN_DIMENSION", 16)
+# There is no GALLERY_FETCH_CONCURRENCY. Django does not fan out: each image is
+# fetched by its own /images/<id> request, so parallelism is the browser's
+# connection pool rather than a thread pool of ours.
+# See docs/adr/0017-image-fetch-timing.md.
+
+# Bounds a single upstream fetch. With no server-side fan-out this is the whole
+# latency story for one tile — nothing waits on a page's worth of them.
 GALLERY_UPSTREAM_TIMEOUT = float(os.environ.get("GALLERY_UPSTREAM_TIMEOUT", "5.0"))
 GALLERY_UPSTREAM_RETRIES = _env_int("GALLERY_UPSTREAM_RETRIES", 2)
 GALLERY_UPSTREAM_BACKOFF = float(os.environ.get("GALLERY_UPSTREAM_BACKOFF", "0.2"))

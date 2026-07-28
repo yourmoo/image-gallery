@@ -2,7 +2,10 @@ from django.urls import path
 
 from . import views
 
+# Route names are the contract for internal links: templates and tests reverse
+# these rather than hardcoding paths (brief line 80). docs/api-contract.md
+# documents every route here, and a test fails if the two drift apart.
 urlpatterns = [
-    path("", views.index, name="index"),
-    path("healthz", views.healthz, name="healthz"),
+    path("", views.AppShellView.as_view(), name="index"),
+    path("healthz", views.HealthView.as_view(), name="healthz"),
 ]
