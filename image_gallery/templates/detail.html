@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Image {{ image_id }}{% endblock %}
+{% block heading %}Image {{ image_id }}{% endblock %}
+
+{% comment %}
+Structure follows docs/ui/design-system.md § Detail view.
+
+Server-rendered rather than built in the browser: this page shows one image and
+needs no client state to decide what that image is, so there is nothing for a
+script to compute. The gallery is client-rendered because its grid is derived
+from bounds; this page is not.
+
+The parameters panel reports **resolved** values (F4.4). Size may read `large`
+even though the user was browsing at `small` — deliberate, per ADR 7, and this
+panel is where they find out. That is the honesty burden the ADR names.
+{% endcomment %}
+
+{% block content %}
+  {% for message in notices %}
+    <p class="notice" data-testid="notice" role="status">{{ message }}</p>
+  {% endfor %}
+
+  <a class="detail__back" data-testid="back-to-gallery" href="{{ back_url }}">
+    &larr; Back to gallery
+  </a>
+
+  <div class="detail">
+    <img class="detail__image" data-testid="detail-image"
+         src="{{ image_url }}" alt="Image {{ image_id }}">
+
+    <dl class="params" data-testid="params">
+      <dt>Identifier</dt>
+      <dd data-testid="param-id">{{ image_id }}</dd>
+
+      <dt>Size</dt>
+      <dd data-testid="param-size">{{ size }}</dd>
+
+      <dt>Grayscale</dt>
+      <dd data-testid="param-grayscale">{{ grayscale|yesno:"on,off" }}</dd>
+
+      <dt>Blur</dt>
+      <dd data-testid="param-blur">{{ blur }}</dd>
+    </dl>
+  </div>
+{% endblock %}

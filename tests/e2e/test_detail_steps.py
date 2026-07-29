@@ -124,8 +124,14 @@ def _select_nth_image(scenario_state, position: int) -> None:
     tile = tiles(page).nth(position - 1)
     expect(tile).to_be_visible()
     scenario_state["selected_id"] = tile.get_attribute("data-image-id")
-    tile.click()
-    scenario_state["response"] = page.wait_for_load_state("networkidle")
+
+    # `expect_navigation` yields the response for the document request, which
+    # "the response status is 200" then reads. `wait_for_load_state` returns
+    # None, so assigning its result left that step asserting against nothing.
+    with page.expect_navigation() as navigation:
+        tile.click()
+    scenario_state["response"] = navigation.value
+
     wait_for_images(scenario_state)
 
 

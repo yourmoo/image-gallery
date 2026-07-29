@@ -24,7 +24,7 @@ docs/adr/0006-recover-and-explain.md exists to prevent.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 
 @dataclass(frozen=True)
@@ -181,6 +181,46 @@ def validate_page(raw: str | None, last_page: int) -> tuple[int, Rejection | Non
         applied=1,
         accepted=f"1 to {last_page}",
     )
+
+
+# The sentence behind each `?notice=` token, for pages rendered server-side.
+#
+# The gallery builds its banner in JavaScript, because its grid is built there
+# anyway and the wording belongs with the rest of the client's copy. The detail
+# page is server-rendered, so its notice is too — a script there would exist
+# only to move markup this template could emit directly, and would leave the
+# explanation missing for the moment before it ran.
+#
+# The duplication with static/js/derive.js is real and deliberate: two renderers
+# need the same sentences, and the alternative is shipping the wording through
+# an endpoint so one can read the other's copy.
+NOTICE_MESSAGES = {
+    "invalid_page": '"{value}" isn\'t a page in this collection — showing page 1.',
+    "invalid_count": '"{value}" isn\'t an available image count — showing 10 per page.',
+    "invalid_size": '"{value}" isn\'t a valid size — showing medium.',
+    "invalid_grayscale": '"{value}" isn\'t a valid grayscale setting — showing colour.',
+    "invalid_blur": '"{value}" isn\'t a valid blur — showing none.',
+}
+
+
+def notice_messages(tokens) -> list[str]:
+    """Turn `?notice=` tokens into the sentences a reader sees.
+
+    A token carries the rejected value after a colon — `invalid_size:huge` —
+    because F3.6 asks the application to explain the fallback rather than
+    merely report that one happened.
+
+    Unrecognised tokens are dropped rather than displayed, so a hand-edited URL
+    cannot put arbitrary text on the page. The value is substituted into a
+    fixed sentence and escaped by the template, never treated as markup.
+    """
+    messages = []
+    for token in tokens:
+        name, _, value = str(token).partition(":")
+        template = NOTICE_MESSAGES.get(name)
+        if template is not None:
+            messages.append(template.format(value=unquote(value)))
+    return messages
 
 
 NAMED_SIZES = ("small", "medium", "large")

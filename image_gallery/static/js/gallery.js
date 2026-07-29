@@ -38,12 +38,20 @@ const grid = document.getElementById("gallery");
  * what the per-tile placeholder exists for: at 50 images the page is roughly
  * 1 MB, arriving progressively.
  */
-function buildTile(id, template, variations) {
+function buildTile(id, template, variations, detailTemplate) {
   const tile = document.createElement("li");
   tile.className = "tile";
   tile.dataset.testid = "image-tile";
   tile.dataset.imageId = String(id);
   tile.dataset.state = "pending";
+
+  /* A real link, so the detail page can be middle-clicked, bookmarked, and
+   * opened in a new tab. It carries the current query, which is how filters
+   * survive the trip to the detail view and back (F4.1, F4.3). */
+  const link = document.createElement("a");
+  link.className = "tile__link";
+  link.dataset.testid = "tile-link";
+  link.href = detailUrl(detailTemplate, id);
 
   const frame = document.createElement("span");
   frame.className = "tile__frame";
@@ -83,9 +91,25 @@ function buildTile(id, template, variations) {
   });
 
   frame.appendChild(img);
-  tile.appendChild(frame);
+  link.appendChild(frame);
+  tile.appendChild(link);
 
   return tile;
+}
+
+/* The detail page for one tile, carrying whatever is currently active.
+ *
+ * Built from a template the server reversed, like the image URL — no path is
+ * written here (F5.4). The query comes from the address bar rather than the
+ * controls, because the URL is the state.
+ */
+function detailUrl(template, id) {
+  const path = template.replace(/0(?=[^0]*$)/, String(id));
+  const params = new URLSearchParams(window.location.search);
+  params.delete("notice");
+
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 /* Created on demand rather than revealed: the scenario "no validation message
@@ -183,11 +207,12 @@ function noteDegraded() {
 function render() {
   const bounds = readBounds(grid.dataset);
   const template = grid.dataset.imageUrlTemplate;
+  const detailTemplate = grid.dataset.detailUrlTemplate;
 
-  /* Unusable bounds, or no URL template, mean the shell did not render what
-   * this script requires. Failing visibly beats an empty grid, which would
-   * look like an empty catalogue rather than a broken page. */
-  if (bounds === null || !template) {
+  /* Unusable bounds, or a missing URL template, mean the shell did not render
+   * what this script requires. Failing visibly beats an empty grid, which
+   * would look like an empty catalogue rather than a broken page. */
+  if (bounds === null || !template || !detailTemplate) {
     showNotice("The gallery could not be loaded.");
     return;
   }
@@ -204,7 +229,7 @@ function render() {
 
   const fragment = document.createDocumentFragment();
   for (const id of imageIds(bounds.page, bounds.count, bounds.catalogueSize)) {
-    fragment.appendChild(buildTile(id, template, variations));
+    fragment.appendChild(buildTile(id, template, variations, detailTemplate));
   }
 
   grid.replaceChildren(fragment);

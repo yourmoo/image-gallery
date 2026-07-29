@@ -21,9 +21,16 @@ pytestmark = pytest.mark.e2e
 
 
 def test_landing_page_loads(page, e2e_base_url):
+    """The shipped image serves a gallery, not the baseline placeholder.
+
+    This asserted on `data-testid="status"` — the "features are not implemented
+    yet" paragraph the baseline rendered. Now that the grid is real, checking
+    for the grid is what proves the deployment serves the application rather
+    than an empty shell.
+    """
     page.goto(e2e_base_url)
 
-    assert page.get_by_test_id("status").is_visible()
+    assert page.get_by_test_id("gallery").is_visible()
     assert "Image Gallery" in page.title()
 
 

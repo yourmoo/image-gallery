@@ -92,6 +92,20 @@ COLD_CACHE_SCENARIOS = {
     "test_an_invalid_count_falls_back_to_the_default_and_says_so",
     "test_a_valid_filter_survives_an_invalid_one",
     "test_active_variations_are_kept_when_i_move_between_pages",
+    # The detail scenarios, again for the same reason: they assert on the
+    # dimensions the detail image was *fetched* at, and the gallery scenarios
+    # have already cached most of the catalogue at most of the sizes.
+    "test_opening_an_image_from_the_gallery",
+    "test_the_detail_view_shows_a_larger_image",
+    "test_the_detail_view_is_large_whatever_size_the_gallery_used",
+    "test_a_custom_size_larger_than_large_is_kept_on_the_detail_page",
+    "test_a_custom_size_smaller_than_large_is_replaced_by_large",
+    "test_active_filters_carry_over_to_the_detail_view",
+    "test_an_unfiltered_gallery_gives_an_unfiltered_detail_view",
+    "test_the_detail_page_lists_the_parameters_used",
+    "test_the_parameters_panel_reports_defaults_when_nothing_is_chosen",
+    "test_returning_to_the_gallery_keeps_my_place_and_my_filters",
+    "test_an_invalid_filter_on_the_detail_page_falls_back_and_says_so",
 }
 
 
@@ -452,6 +466,27 @@ def open_gallery(scenario_state):
     wait_for_images(scenario_state)
 
 
+@when(parsers.parse('I open the gallery with size "{size}"'))
+def open_with_size(size: str, scenario_state):
+    """Unvalidated on purpose: the string reaches the application as written.
+
+    This is the invalid- and custom-size family, so 'huge', '300x' and
+    '6000x6000' must not be sanitised by the test.
+
+    The size is also recorded as active, so a later step carries it — both
+    'I open page 2' and 'I select the first image' read the same bag. Without
+    that, those scenarios navigate without the size, lose it for a reason the
+    harness invented, and report a failure the application did not cause.
+
+    Shared rather than living beside the variation scenarios: detail.feature
+    opens the gallery at a custom size too, and a step defined in one feature's
+    module is not visible to another's.
+    """
+    scenario_state.setdefault("params", {})["size"] = size
+    goto(scenario_state, f"/?size={size}")
+    wait_for_images(scenario_state)
+
+
 @when(parsers.parse("I open page {page:d} of the gallery"))
 def open_page(page: int, scenario_state):
     params = {**scenario_state.get("params", {}), "page": str(page)}
@@ -467,6 +502,118 @@ def images_finished_loading(scenario_state):
     positions: assert the grid is present, wait, then assert about the tiles.
     """
     wait_for_images(scenario_state)
+
+
+def _successful_image_requests(scenario_state):
+    return [r for r in scenario_state["upstream"].image_requests if r.seed is not None]
+
+
+def _assert_every_tile_requested(scenario_state, **expected) -> None:
+    """Every tile on the page was fetched with these transformation values.
+
+    Applies to the whole page rather than one tile: F3.5 combines filters, and
+    a page that applied blur to only some tiles would satisfy a spot check.
+    """
+    requests = _successful_image_requests(scenario_state)
+    assert requests, "no upstream image requests were made"
+
+    for field, value in expected.items():
+        actual = {getattr(r, field) for r in requests}
+        assert actual == {value}, f"expected every tile to use {field}={value}, saw {actual}"
+
+
+def _assert_notice_mentions(scenario_state, value: str) -> None:
+    """The notice must name the offending value, not merely appear.
+
+    F3.6 is about explaining the fallback: a generic 'something was wrong'
+    banner would satisfy a visibility-only assertion while telling the user
+    nothing.
+    """
+    notice = scenario_state["page"].get_by_test_id("notice")
+    expect(notice).to_be_visible()
+    expect(notice).to_contain_text(value)
+
+
+@then(parsers.parse('the images are rendered at size "{size}"'))
+def images_at_named_size(size: str, scenario_state):
+    """Assert on the dimensions the application requested upstream.
+
+    A named size is a fetch-time decision (ADR 9): 'large' means Django asked
+    picsum for the pixel dimensions configured for large. The rendered tile
+    cannot show this — CSS could scale anything to any box — so the request log
+    is the only honest observation.
+    """
+    requests = _successful_image_requests(scenario_state)
+    assert requests, "no upstream image requests were made"
+
+    dimensions = {(r.width, r.height) for r in requests}
+    assert len(dimensions) == 1, f"expected one size for every tile, saw {dimensions}"
+
+    scenario_state.setdefault("observed_size", dimensions.pop())
+
+
+@then(parsers.parse("the images are rendered at {width:d} by {height:d} pixels"))
+def images_at_custom_size(width: int, height: int, scenario_state):
+    requests = _successful_image_requests(scenario_state)
+    assert requests, "no upstream image requests were made"
+
+    dimensions = {(r.width, r.height) for r in requests}
+    assert dimensions == {(width, height)}, f"expected {width}x{height}, saw {dimensions}"
+
+
+@then("the images are rendered in grayscale")
+def images_in_grayscale(scenario_state):
+    """Grayscale is what the viewer sees, so read it from the rendered tile.
+
+    Asserting only that Django sent grayscale=1 upstream would pass even if the
+    page dropped the result on the floor.
+    """
+    _assert_every_tile_requested(scenario_state, grayscale=True)
+
+
+@then("the images have no filters applied")
+def images_no_filters(scenario_state):
+    _assert_every_tile_requested(scenario_state, grayscale=False, blur=0)
+
+
+@then(parsers.parse("the images are rendered with blur {blur:d}"))
+def images_with_blur(blur: int, scenario_state):
+    _assert_every_tile_requested(scenario_state, blur=blur)
+
+
+@then("the images have no blur applied")
+def images_no_blur(scenario_state):
+    _assert_every_tile_requested(scenario_state, blur=0)
+
+
+def _assert_notice_mentions(scenario_state, value: str) -> None:
+    """The notice must name the offending value, not merely appear.
+
+    F3.6 is about explaining the fallback: a generic "something was wrong"
+    banner would satisfy a visibility-only assertion while telling the user
+    nothing about which parameter was ignored.
+    """
+    notice = scenario_state["page"].get_by_test_id("notice")
+    expect(notice).to_be_visible()
+    expect(notice).to_contain_text(value)
+
+
+# Shared rather than living beside the variation scenarios: the detail page
+# recovers from a bad parameter the same way the gallery does, and a step
+# defined in one feature's module is invisible to another's.
+@then(parsers.parse('the page explains that "{value}" is not a valid size'))
+def explains_invalid_size(value: str, scenario_state):
+    _assert_notice_mentions(scenario_state, value)
+
+
+@then(parsers.parse('the page explains that "{value}" is not a valid blur'))
+def explains_invalid_blur(value: str, scenario_state):
+    _assert_notice_mentions(scenario_state, value)
+
+
+@then(parsers.parse('the page explains that "{value}" is not a valid image count'))
+def explains_invalid_count(value: str, scenario_state):
+    _assert_notice_mentions(scenario_state, value)
 
 
 @then(parsers.parse("the response status is {status:d}"))

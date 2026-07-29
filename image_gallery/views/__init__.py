@@ -11,8 +11,9 @@ in stage 9, which genuinely does share that prologue. A mixin with one user
 would be indirection without abstraction.
 """
 
+from .detail import ImageDetailView
 from .health import HealthView
 from .image import ImageProxyView
 from .shell import AppShellView
 
-__all__ = ["AppShellView", "HealthView", "ImageProxyView"]
+__all__ = ["AppShellView", "HealthView", "ImageDetailView", "ImageProxyView"]

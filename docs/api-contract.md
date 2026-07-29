@@ -13,7 +13,8 @@ behaves when they are wrong.
 | Route name | Path | Method | Response |
 | --- | --- | --- | --- |
 | `index` | `/` | GET | `text/html` |
-| `image` | `/images/1` | GET | `image/jpeg` |
+| `detail` | `/images/1` | GET | `text/html` |
+| `image` | `/img/1` | GET | `image/jpeg` |
 | `healthz` | `/healthz` | GET | `application/json` |
 
 Internal links are built by reversing **route names**, never by writing paths
@@ -39,10 +40,36 @@ data attributes on the grid container:
 The client computes the id range from these rather than fetching it
 ([ADR 20](adr/0020-ids-are-derived-in-the-browser.md)). They are configuration
 handed to the client, never values it decides: the server still validates every
-parameter here and again at `/images/<id>`.
+parameter here and again at `/img/<id>`.
 
 `200` for a valid request. An invalid parameter is corrected here rather than
 passed on — see [Parameter handling](#parameter-handling).
+
+### `detail` — one image, on its own page
+
+A **page**, not bytes — `/img/<id>` serves those. Two routes because a user
+links to and bookmarks the first while an `<img>` element fetches the second,
+and one path cannot be both.
+
+Accepts the same parameters as `index`, and applies one rule of its own: **size
+is forced up, filters carry over untouched**
+([ADR 7](adr/0007-detail-view-size.md)).
+
+| Gallery was showing | The detail page renders at |
+| --- | --- |
+| `small`, `medium`, `large` | `large` |
+| `300x300` (below `large`) | `large` |
+| `1200x900` (above `large`) | `1200x900` — dropping to `large` would make the detail view *smaller* than the grid |
+| `grayscale`, `blur` | unchanged |
+
+The parameters panel reports the **resolved** values, so `size` reads `large`
+even when the gallery was showing `small`. That is the point of it: this page
+silently changes one of the user's parameters, and the panel is where they find
+out (F4.4).
+
+Like `index`, this is a document boundary — an invalid parameter is corrected
+by a redirect rather than refused. An id outside the catalogue is the exception
+and returns `404`: it has no sensible substitute.
 
 ### `healthz` — liveness
 
@@ -90,7 +117,7 @@ arithmetic. This is what the detail view's parameters panel renders (F4.4).
 | `blur` | integer 0–10 | 0 | Combines with `grayscale` |
 
 ```json
-{"id": 1, "url": "/images/1?size=large", "width": 800, "height": 800,
+{"id": 1, "url": "/img/1?size=large", "width": 800, "height": 800,
  "grayscale": false, "blur": 0}
 ```
 
