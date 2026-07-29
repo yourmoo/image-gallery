@@ -141,10 +141,22 @@ nowhere to go and the rule needs a special case.
 The brief wants both a redirect and a user-facing message. There is no database,
 so there are no sessions and no `django.contrib.messages`.
 
-**Resolved:** the view validates, redirects to `?page=1&notice=invalid_page`,
-and renders the banner from the query parameter. Stateless and bookmarkable.
+**Resolved:** the address ends up at `?page=1&notice=invalid_page` and the
+banner is rendered from the query parameter. Stateless and bookmarkable.
 
-Why the redirect is worth having rather than rendering page 1 in place:
+Two paths reach that outcome, per [ADR 6](adr/0006-recover-and-explain.md):
+
+- **Initial document request** — a pasted or bookmarked `?page=abc` hits the
+  shell view, which returns a 302 to `/?page=1&notice=invalid_page`.
+- **In-app navigation** — no document request occurs, so the client corrects
+  the address with `history.replaceState` (not `pushState`, so the invalid
+  address leaves no history entry to go Back to).
+
+Both call the same validator, so the rule is defined once. Brief line 48
+requires a redirect *to page 1*, not a particular status code, and the three
+reasons below hold for either path.
+
+Why correcting the address is worth having rather than rendering page 1 in place:
 
 - **URL truthfulness** — the address bar matches the content, so bookmarking,
   sharing, and refreshing all behave.

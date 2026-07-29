@@ -217,11 +217,17 @@ def no_prev_link(scenario_state):
 
 @then(parsers.parse("I am redirected to page {page:d}"))
 def redirected_to_page(page: int, scenario_state):
-    """Under client-side rendering this is a URL correction, not a 3xx.
+    """Asserts the address, deliberately not the HTTP status.
 
-    ADR 2 makes the gallery client-rendered, so an invalid page is clamped and
-    the address corrected with replaceState. What the user observes — the
-    address now reads page 1 — is identical, and that is what is asserted.
+    ADR 6 specifies two paths to the same outcome: a 302 from the shell view on
+    an initial document request, and a `history.replaceState` correction for
+    in-app navigation. Both call the same validator.
+
+    The scenarios reaching this step navigate by URL, so they exercise the 302
+    path -- but asserting on the address rather than the status keeps the step
+    true of both, which matters because "I am redirected to page 1" also
+    follows control changes elsewhere in the suite. Brief line 48 requires a
+    redirect *to page 1*, not a particular status code.
     """
     url = scenario_state["page"].url
     assert re.search(rf"[?&]page={page}\b", url) or not re.search(r"[?&]page=", url), (
