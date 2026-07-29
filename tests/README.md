@@ -8,6 +8,7 @@ tests/
   pytest.ini            pytest configuration (rootdir when passed via -c)
   .coveragerc           coverage configuration
   conftest.py           shared fixtures
+  run.py                the entry point — one command per tier, owns every report path
   cucumber_html.py      renders Cucumber JSON to a readable scenario report
   js_tests.py           runs the client tests in a container, renders their report
   unit/                 modules in isolation, both languages
@@ -320,57 +321,59 @@ Each command writes only its own directory. Running the e2e command produces no
 coverage report, and the unit command produces no Cucumber report — expected,
 not a misconfiguration.
 
-### Unit tier — Python
+### Running a tier
 
-Results plus browsable coverage, into `tests/reports/unit/python/`:
+`tests/run.py` is the entry point, and **no report path is typed by hand**:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m "not e2e" `
-  --html=tests/reports/unit/python/report.html --self-contained-html `
-  --cov --cov-config=tests/.coveragerc `
-  --cov-report=html:tests/reports/unit/python/htmlcov --cov-report=term-missing
+.\.venv\Scripts\python.exe tests/run.py python    # Django modules, with coverage
+.\.venv\Scripts\python.exe tests/run.py js        # the client, with coverage
+.\.venv\Scripts\python.exe tests/run.py e2e       # scenarios in a browser
+.\.venv\Scripts\python.exe tests/run.py all       # every tier, in that order
 ```
 
-Without `--cov-report=html` only the terminal summary appears and no browsable
-report is written. The raw `.coverage` database is deleted once reports are
-generated.
-
-### Unit tier — client
-
-The browser's own logic, run by Node's built-in test runner **in a container**,
-so no JavaScript toolchain is installed locally:
+Add `--clean` to empty that tier's report directory first, so a deleted test
+cannot leave a stale report behind. Pass extra arguments through after the tier:
 
 ```powershell
-.\.venv\Scripts\python.exe tests/js_tests.py
+.\.venv\Scripts\python.exe tests/run.py python -- -k validation -x
+.\.venv\Scripts\python.exe tests/run.py e2e -- -m stage1
 ```
 
-That wrapper runs the tests, collects coverage, and writes
-`tests/reports/unit/js/report.html`. It exits non-zero if a test fails or
-coverage falls below its floor, so it can gate a build. To run the tests
-directly without a report:
+That indirection exists for a reason. The paths used to live as prose in four
+separate commands here, and when `reports/` was reorganised those commands kept
+writing to the old locations — leaving orphaned directories that looked like
+current output. Paths belong in one place that can be changed once.
+
+The underlying commands are still ordinary `pytest` and `node --test`; run them
+directly if you prefer:
 
 ```powershell
+.\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m "not e2e"
 docker run --rm -v "${PWD}:/app" -w /app node:22-slim `
   node --test --test-reporter=spec "tests/unit/js/*.test.js"
 ```
 
-There is no `package.json` and no `node_modules`. See
-[unit/js/README.md](unit/js/README.md) for what belongs in this tier and why it
-is restricted to pure functions.
+The client tier needs no local JavaScript toolchain — no `package.json`, no
+`node_modules`. See [unit/js/README.md](unit/js/README.md) for what belongs in
+it and why it is restricted to pure functions.
 
 ### Behavioural tier
 
-Results and scenario-level JSON, into `tests/reports/e2e/`. Needs the stack:
+Needs the stack. `run.py e2e` starts pytest, writes the Cucumber JSON, and
+renders `scenarios.html` from it in one step:
 
 ```powershell
 docker compose -f compose.e2e.yaml up -d --build
-$env:E2E_BASE_URL = 'http://127.0.0.1:8081'
-.\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m e2e --no-cov `
-  --html=tests/reports/e2e/report.html --self-contained-html `
-  --cucumber-json=tests/reports/e2e/cucumber.json
-.\.venv\Scripts\python.exe tests/cucumber_html.py `
-  tests/reports/e2e/cucumber.json tests/reports/e2e/scenarios.html
+.\.venv\Scripts\python.exe tests/run.py e2e
 ```
+
+The stack is started here rather than by the runner because it is slow to build
+and usually already up; `conftest.py` starts it if it is not, and leaves a stack
+it did not start running.
+
+`scenarios.html` is rendered even when scenarios fail — a failing run is exactly
+when the Given/When/Then breakdown is worth reading.
 
 `--no-cov` is deliberate: browser tests run Django in a container the in-process
 coverage tool cannot observe, so including them would understate coverage rather
