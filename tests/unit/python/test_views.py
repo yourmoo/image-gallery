@@ -23,6 +23,16 @@ def query_of(response) -> dict:
     return parse_qs(urlparse(response["Location"]).query)
 
 
+def notices_in(response) -> list[str]:
+    """The parameter names named by a redirect's notices.
+
+    A notice token is `invalid_<parameter>:<value>`; the value varies with the
+    input, so tests assert on the parameter and leave the wording to the
+    client, which is where it belongs.
+    """
+    return [token.split(":", 1)[0] for token in query_of(response).get("notice", [])]
+
+
 # --- the published bounds (ADR 20) ---------------------------------------
 
 
@@ -62,7 +72,8 @@ def test_an_invalid_size_never_reaches_the_markup(client):
     response = client.get(reverse("index"), {"size": "huge"})
 
     assert response.status_code == 302
-    assert "huge" not in response["Location"]
+    assert "size=huge" not in response["Location"], "not as a live parameter"
+    assert notices_in(response) == ["invalid_size"]
 
 
 def test_the_shell_publishes_a_reversed_image_url_template(client):
@@ -174,7 +185,7 @@ def test_a_bad_page_in_the_address_bar_redirects_to_page_one(client, bad):
 
     assert response.status_code == 302
     assert "page" not in query_of(response)
-    assert query_of(response)["notice"] == ["invalid_page"]
+    assert notices_in(response) == ["invalid_page"]
 
 
 @pytest.mark.parametrize("bad", ["7", "0", "-1", "abc"])
@@ -183,7 +194,7 @@ def test_a_bad_count_is_corrected_to_the_default(client, bad):
 
     assert response.status_code == 302
     assert "count" not in query_of(response), "the default is written as an absence"
-    assert query_of(response)["notice"] == ["invalid_count"]
+    assert notices_in(response) == ["invalid_count"]
 
 
 def test_a_corrected_url_keeps_a_non_default_value_explicit(client):
@@ -191,7 +202,7 @@ def test_a_corrected_url_keeps_a_non_default_value_explicit(client):
     response = client.get(reverse("index"), {"page": "3", "count": "7"})
 
     assert query_of(response)["page"] == ["3"]
-    assert query_of(response)["notice"] == ["invalid_count"]
+    assert notices_in(response) == ["invalid_count"]
 
 
 def test_the_redirect_preserves_parameters_it_did_not_reject(client):
@@ -199,7 +210,7 @@ def test_the_redirect_preserves_parameters_it_did_not_reject(client):
     response = client.get(reverse("index"), {"page": "abc", "size": "large"})
 
     assert query_of(response)["size"] == ["large"]
-    assert query_of(response)["notice"] == ["invalid_page"]
+    assert notices_in(response) == ["invalid_page"]
 
 
 def test_several_invalid_parameters_produce_several_notices(client):
@@ -210,7 +221,7 @@ def test_several_invalid_parameters_produce_several_notices(client):
     """
     response = client.get(reverse("index"), {"page": "abc", "count": "7"})
 
-    assert sorted(query_of(response)["notice"]) == ["invalid_count", "invalid_page"]
+    assert sorted(notices_in(response)) == ["invalid_count", "invalid_page"]
 
 
 def test_a_valid_request_is_not_redirected(client):

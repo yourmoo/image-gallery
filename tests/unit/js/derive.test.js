@@ -231,8 +231,24 @@ describe("noticeMessages", () => {
     ]);
   });
 
+  it("names the value that was rejected", () => {
+    // F3.6 is about explaining the fallback. A generic "something was wrong"
+    // banner passes a visibility check while telling the user nothing about
+    // which of their parameters was ignored.
+    const [message] = noticeMessages(["invalid_size:huge"]);
+
+    assert.ok(message.includes("huge"), message);
+    assert.ok(message.includes("medium"), "and what was used instead");
+  });
+
+  it("keeps the value readable when it was percent-encoded", () => {
+    const [message] = noticeMessages(["invalid_size:LARGE%21%21"]);
+
+    assert.ok(message.includes("LARGE!!"), message);
+  });
+
   it("maps several tokens, because several parameters can be invalid at once", () => {
-    assert.equal(noticeMessages(["invalid_page", "invalid_count"]).length, 2);
+    assert.equal(noticeMessages(["invalid_page", "invalid_count:7"]).length, 2);
   });
 
   it("ignores a token it does not recognise", () => {
@@ -240,6 +256,10 @@ describe("noticeMessages", () => {
     assert.deepEqual(noticeMessages(["invalid_page", "<script>"]), [
       "That page doesn't exist — showing page 1.",
     ]);
+  });
+
+  it("does not treat an unknown parameter as a template", () => {
+    assert.deepEqual(noticeMessages(["invalid_wat:x"]), []);
   });
 
   it("returns nothing when there is nothing to say", () => {

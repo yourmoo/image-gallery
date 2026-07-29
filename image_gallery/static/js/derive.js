@@ -122,10 +122,56 @@ export function imageUrl(template, id, variations) {
  * dropped rather than displayed, so a hand-edited URL cannot put arbitrary
  * text on the page. */
 const NOTICES = {
-  invalid_page: "That page doesn't exist — showing page 1.",
-  invalid_count: "That image count isn't available — showing 10 per page.",
+  invalid_page: (value) =>
+    value
+      ? `"${value}" isn't a page in this collection — showing page 1.`
+      : "That page doesn't exist — showing page 1.",
+  invalid_count: (value) =>
+    value
+      ? `"${value}" isn't an available image count — showing 10 per page.`
+      : "That image count isn't available — showing 10 per page.",
+  invalid_size: (value) =>
+    value
+      ? `"${value}" isn't a valid size — showing medium.`
+      : "That size isn't valid — showing medium.",
+  invalid_grayscale: (value) =>
+    value
+      ? `"${value}" isn't a valid grayscale setting — showing colour.`
+      : "That grayscale setting isn't valid — showing colour.",
+  invalid_blur: (value) =>
+    value
+      ? `"${value}" isn't a valid blur — showing none.`
+      : "That blur isn't valid — showing none.",
 };
 
+/* Turn `?notice=` tokens into the sentences a reader sees.
+ *
+ * A token may carry the rejected value after a colon — `invalid_size:huge` —
+ * because F3.6 is about *explaining* the fallback, and a banner that said only
+ * "something was wrong" would tell the user nothing about which parameter was
+ * ignored. The value is percent-encoded in the URL and decoded here.
+ *
+ * Unrecognised tokens are dropped rather than displayed, so a hand-edited URL
+ * cannot put arbitrary text on the page. The value is inserted as text
+ * content, never as markup, so even a recognised token cannot inject anything.
+ */
 export function noticeMessages(tokens) {
-  return tokens.map((token) => NOTICES[token]).filter(Boolean);
+  return tokens
+    .map((token) => {
+      const separator = token.indexOf(":");
+      const name = separator === -1 ? token : token.slice(0, separator);
+      const raw = separator === -1 ? "" : token.slice(separator + 1);
+
+      const template = NOTICES[name];
+      if (!template) return null;
+
+      let value = raw;
+      try {
+        value = decodeURIComponent(raw);
+      } catch {
+        // A malformed escape sequence — show it as written rather than throw.
+      }
+      return template(value);
+    })
+    .filter(Boolean);
 }

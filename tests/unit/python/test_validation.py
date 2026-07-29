@@ -237,10 +237,22 @@ def test_a_rejected_page_names_the_real_bound():
 
 
 def test_the_notice_token_is_a_token_not_a_sentence():
-    """Wording belongs to the UI; the URL carries an identifier."""
+    """Wording belongs to the UI; the URL carries an identifier and the value.
+
+    The value rides along so the banner can name what was rejected (F3.6),
+    percent-encoded so a hostile one cannot break out of the query string.
+    """
     _, rejection = validate_page("abc", last_page=10)
 
-    assert rejection.notice == "invalid_page"
+    assert rejection.notice == "invalid_page:abc"
+
+
+def test_a_notice_token_escapes_the_rejected_value():
+    _, rejection = validate_size(
+        "LARGE!!", default="medium", minimum=16, maximum=1600
+    )
+
+    assert rejection.notice == "invalid_size:LARGE%21%21"
 
 
 # --- grayscale -----------------------------------------------------------

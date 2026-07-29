@@ -81,6 +81,17 @@ COLD_CACHE_SCENARIOS = {
     "test_blurring_the_images",
     "test_combining_grayscale_and_blur",
     "test_size_and_filters_apply_together",
+    # The rejection scenarios, for the same reason once removed. Each opens
+    # with a bad parameter, is corrected to the defaults, and then asserts what
+    # the *defaults* were fetched at — and the default page is the one every
+    # other scenario has already cached.
+    "test_a_custom_size_outside_the_allowed_bounds_is_rejected",
+    "test_a_custom_size_is_kept_when_i_move_between_pages",
+    "test_an_invalid_size_falls_back_to_the_default_and_says_so",
+    "test_a_blur_outside_the_range_falls_back_to_none_and_says_so",
+    "test_an_invalid_count_falls_back_to_the_default_and_says_so",
+    "test_a_valid_filter_survives_an_invalid_one",
+    "test_active_variations_are_kept_when_i_move_between_pages",
 }
 
 

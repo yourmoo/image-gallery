@@ -24,6 +24,7 @@ docs/adr/0006-recover-and-explain.md exists to prevent.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from urllib.parse import quote
 
 
 @dataclass(frozen=True)
@@ -60,8 +61,14 @@ class Rejection:
 
         A token rather than a sentence: the wording belongs to the UI, and
         prose in a URL would be both unwieldy and untranslatable.
+
+        The rejected value rides along after a colon, percent-encoded, because
+        F3.6 asks the application to *explain* the fallback — a banner saying
+        only "that size isn't valid" leaves the user guessing which of their
+        parameters was ignored. The client decodes it and inserts it as text,
+        never as markup.
         """
-        return f"invalid_{self.parameter}"
+        return f"invalid_{self.parameter}:{quote(str(self.value), safe='')}"
 
 
 @dataclass

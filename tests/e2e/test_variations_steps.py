@@ -95,7 +95,13 @@ def open_with_size(size: str, scenario_state):
 
     This is the invalid- and custom-size family, so 'huge', '300x' and
     '6000x6000' must not be sanitised by the test.
+
+    The size is also recorded as active, so a later 'I open page 2' carries it.
+    Without that, the persistence scenario navigates to a bare `?page=2`, loses
+    the size for a reason the harness invented, and reports a failure the
+    application did not cause.
     """
+    scenario_state.setdefault("params", {})["size"] = size
     goto(scenario_state, f"/?size={size}")
     wait_for_images(scenario_state)
 
