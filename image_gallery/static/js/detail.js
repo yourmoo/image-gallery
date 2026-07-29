@@ -18,13 +18,25 @@
 
 /* Whether a control should apply on its own, or wait for the button.
  *
- * Selects, checkboxes, and ranges each represent a completed choice the moment
- * they change. A text field does not — it would navigate on every keystroke —
- * so anything else falls back to the submit button, which is why the button
- * stays in the markup rather than being removed once script is available.
+ * Every input the panel offers does: a select, a checkbox, a range, and a text
+ * field all represent a completed choice by the time they fire `change`.
+ *
+ * The text field was excluded at first, on the worry that it would navigate on
+ * every keystroke. That is `input`, not `change` — a text field fires `change`
+ * only when it loses focus or Enter is pressed, both of which mean the user
+ * has finished typing. Excluding it left the custom-size field inert, since
+ * the Apply button it was meant to fall back to had already been hidden.
+ *
+ * The button and this list are still separate concerns: the button exists for
+ * a browser with no script at all, not as a fallback for particular controls.
  */
 export function appliesImmediately(type) {
-  return type === "select-one" || type === "checkbox" || type === "range";
+  return (
+    type === "select-one" ||
+    type === "checkbox" ||
+    type === "range" ||
+    type === "text"
+  );
 }
 
 /* The event that means "the user has finished choosing".

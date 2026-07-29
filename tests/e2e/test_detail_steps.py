@@ -155,6 +155,27 @@ def offers_control(parameter: str, scenario_state):
     expect(scenario_state["page"].get_by_test_id(testid)).to_be_visible()
 
 
+@then(parsers.parse("the image is displayed no wider than {pixels:d} pixels"))
+def image_displayed_no_wider_than(pixels: int, scenario_state):
+    """The chosen size must be *visible*, not merely fetched.
+
+    Every other size assertion in this suite reads the upstream request log,
+    which is the honest observation for what was fetched. This one deliberately
+    reads the rendered box instead, because fetching a 200px image and then
+    stretching it to 724px is exactly the bug it exists to catch: the request
+    log looked perfect while the page showed no difference at all.
+    """
+    image = scenario_state["page"].get_by_test_id("detail-image")
+    image.evaluate("e => e.complete || new Promise(r => { e.onload = r; })")
+
+    box = image.bounding_box()
+    assert box is not None, "the detail image has no layout box"
+    assert box["width"] <= pixels + 1, (
+        f"expected no wider than {pixels}px, rendered at {box['width']:.0f}px "
+        "— a smaller image is being upscaled to fill the column"
+    )
+
+
 @when("I follow the link back to the gallery")
 def follow_back_link(scenario_state):
     """F4.1 — returning must restore the page and the filters.

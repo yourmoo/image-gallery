@@ -63,6 +63,10 @@ class AppShellView(View):
             # never reach a CSS selector.
             "size": result.size,
             "named_sizes": NAMED_SIZES,
+            # The field's value, empty unless a custom size is active. A select
+            # cannot show a value it does not list, so the two controls split
+            # the job: named sizes in the dropdown, WxH in the field.
+            "custom_size": "" if result.size in NAMED_SIZES else result.size,
             "grayscale": result.grayscale,
             "blur": result.blur,
             "max_blur": settings.GALLERY_MAX_BLUR,

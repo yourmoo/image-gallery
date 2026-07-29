@@ -107,6 +107,26 @@ def test_the_count_control_offers_exactly_the_configured_allow_list(client):
         assert f'value="{value}"' in body
 
 
+def test_the_gallery_offers_a_field_for_a_custom_size(client):
+    """`WxH` cannot be enumerated in a select, so it gets a field beside one.
+
+    The backend has always accepted custom dimensions (ADR 10) and validated
+    them against the configured bounds; without a control the feature was
+    reachable only by editing the URL.
+    """
+    body = client.get(reverse("index")).content.decode()
+
+    assert 'data-testid="custom-size-control"' in body
+
+
+def test_an_active_custom_size_fills_the_field_rather_than_the_select(client):
+    """The form re-renders from the URL, so an active custom size has to be
+    visible on load — and it cannot be, in a select that does not list it."""
+    body = client.get(reverse("index"), {"size": "640x480"}).content.decode()
+
+    assert 'value="640x480"' in body
+
+
 def test_the_active_count_is_marked_selected(client):
     """The form is re-rendered from the URL on every navigation, so which value
     is active has to be visible on load (docs/ui/ui-notes.md § States)."""

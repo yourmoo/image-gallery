@@ -110,6 +110,11 @@ COLD_CACHE_SCENARIOS = {
     # filters the changed image was *fetched* at, and the earlier scenarios
     # have already cached most of the catalogue at most of the variations.
     "test_choosing_a_size_on_the_detail_page",
+    # The custom-size control, same reason as every other size assertion.
+    "test_entering_a_custom_size_in_the_gallery",
+    "test_a_custom_size_entered_out_of_bounds_is_rejected_like_any_other",
+    "test_entering_a_custom_size_on_the_detail_page",
+    "test_a_smaller_size_is_displayed_smaller_not_upscaled",
     "test_turning_grayscale_on_from_the_detail_page",
     "test_changing_the_blur_from_the_detail_page",
     "test_the_panel_reports_a_value_the_user_chose_here_not_the_one_they_arrived_with",
@@ -630,6 +635,31 @@ def explains_invalid_blur(value: str, scenario_state):
 @then(parsers.parse('the page explains that "{value}" is not a valid image count'))
 def explains_invalid_count(value: str, scenario_state):
     _assert_notice_mentions(scenario_state, value)
+
+
+@when(parsers.parse('I enter the custom size "{size}"'))
+def enter_custom_size(size: str, scenario_state):
+    """Drive the custom-size field.
+
+    Shared because both pages offer one: WxH cannot be enumerated in a select,
+    so the named sizes are a dropdown and a custom size is a field beside it.
+
+    The cache and log are cleared first, for the same reason every other
+    control step clears them — what the field does must be the only thing the
+    upstream log describes.
+    """
+    empty_image_cache()
+    scenario_state["upstream"].reset()
+
+    field = scenario_state["page"].get_by_test_id("custom-size-control")
+    field.fill(size)
+    field.dispatch_event("change")
+    wait_for_images(scenario_state)
+
+
+@then("the page offers a field for a custom size")
+def offers_custom_size_field(scenario_state):
+    expect(scenario_state["page"].get_by_test_id("custom-size-control")).to_be_visible()
 
 
 @then(parsers.parse("the response status is {status:d}"))

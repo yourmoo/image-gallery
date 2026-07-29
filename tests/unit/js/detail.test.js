@@ -32,10 +32,18 @@ describe("appliesImmediately", () => {
     assert.equal(appliesImmediately("range"), true);
   });
 
-  it("leaves anything else to the submit button", () => {
-    // A text field would otherwise navigate on every keystroke.
-    assert.equal(appliesImmediately("text"), false);
+  it("applies a text field too, since `change` means committed", () => {
+    // The worry was navigating per keystroke, but that is `input`, not
+    // `change` — a text field fires `change` when it loses focus or Enter is
+    // pressed, both of which mean the user has finished typing. Excluding it
+    // left the custom-size field inert unless the Apply button was clicked,
+    // which script had already hidden.
+    assert.equal(appliesImmediately("text"), true);
+  });
+
+  it("leaves the submit button alone", () => {
     assert.equal(appliesImmediately("submit"), false);
+    assert.equal(appliesImmediately("hidden"), false);
   });
 });
 
@@ -56,7 +64,11 @@ describe("submitEvent", () => {
     assert.equal(submitEvent("range"), "change");
   });
 
+  it("uses change for a text field, which fires on commit not on keystroke", () => {
+    assert.equal(submitEvent("text"), "change");
+  });
+
   it("gives nothing for a control that does not self-apply", () => {
-    assert.equal(submitEvent("text"), null);
+    assert.equal(submitEvent("submit"), null);
   });
 });

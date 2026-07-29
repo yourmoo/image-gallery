@@ -30,7 +30,8 @@ Feature: Image variations
       | large  |
 
   # Custom dimensions are a fourth form of the same size parameter, bounded by
-  # a configured ceiling and floor. The UI offers named sizes only.
+  # a configured ceiling and floor. The named sizes are a select; a custom size
+  # is a field beside it, because WxH cannot be enumerated.
   @F3_2 @stage7
   Scenario Outline: Asking for a custom size
     When I open the gallery with size "<size>"
@@ -71,6 +72,24 @@ Feature: Image variations
     And I open page 2 of the gallery
     Then the images are rendered at 640 by 480 pixels
     And the page shows images 11 to 20
+
+  @F3_2 @stage12
+  Scenario: The gallery offers a control for a custom size
+    When I open the gallery
+    Then the page offers a field for a custom size
+
+  @F3_2 @stage12
+  Scenario: Entering a custom size in the gallery
+    When I open the gallery
+    And I enter the custom size "640x480"
+    Then the images are rendered at 640 by 480 pixels
+
+  @F3_6 @stage12
+  Scenario: A custom size entered out of bounds is rejected like any other
+    When I open the gallery
+    And I enter the custom size "6000x6000"
+    Then the images are rendered at size "medium"
+    And the page explains that "6000x6000" is not a valid size
 
   @F3_3 @stage7
   Scenario: Viewing the collection in grayscale

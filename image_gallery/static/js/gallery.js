@@ -299,6 +299,22 @@ function wireControls() {
       applyControl("count", count.value, false)
     );
   }
+
+  /* The custom-size field writes to `size`, the same parameter the select
+   * writes to — they are two ways of expressing one thing, and the URL carries
+   * one value either way. Emptying the field therefore falls back to the
+   * select's current choice rather than to nothing.
+   *
+   * `change` rather than `input`: a field applied per keystroke would navigate
+   * on "6", then "64", then "640" before reaching "640x480", and each of those
+   * is a value the server would reject. */
+  const customSize = document.querySelector('[data-testid="custom-size-control"]');
+  if (customSize) {
+    customSize.addEventListener("change", () => {
+      const value = customSize.value.trim();
+      applyControl("size", value || (size ? size.value : "medium"), !value);
+    });
+  }
 }
 
 if (grid) {

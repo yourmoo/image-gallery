@@ -52,14 +52,31 @@ panel is where they find out. That is the honesty burden the ADR names.
         <dt><label for="detail_size">Size</label></dt>
         <dd data-testid="param-size">
           <select class="control__field" id="detail_size" name="detail_size"
-                  data-testid="size-control">
+                  data-testid="size-control"{% if custom_size %} disabled{% endif %}>
             {% for name in named_sizes %}
               <option value="{{ name }}"{% if name == size %} selected{% endif %}>{{ name }}</option>
             {% endfor %}
-            {% if size not in named_sizes %}
-              <option value="{{ size }}" selected>{{ size }}</option>
-            {% endif %}
           </select>
+          {% comment %}
+          The resolved value as text, beside the control. A select shows only
+          the options it lists, so a custom size would report as blank — and
+          this row is the report as much as the control (F4.4).
+          {% endcomment %}
+          <span class="params__value">{{ size }}</span>
+        </dd>
+
+        {% comment %}
+        The custom size gets its own field for the same reason the gallery's
+        does: WxH cannot be enumerated. Naming it `detail_size` keeps a choice
+        made here from following the user back to the grid.
+        {% endcomment %}
+        <dt><label for="custom_detail_size">Custom size</label></dt>
+        <dd>
+          <input class="control__field control__field--narrow" type="text"
+                 id="custom_detail_size" name="detail_size"
+                 data-testid="custom-size-control"
+                 value="{{ custom_size }}" placeholder="1200x900"
+                 autocomplete="off" size="9">
         </dd>
 
         <dt><label for="grayscale">Grayscale</label></dt>

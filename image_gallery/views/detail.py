@@ -118,6 +118,10 @@ class ImageDetailView(View):
             "grayscale": result.grayscale,
             "blur": result.blur,
             "named_sizes": NAMED_SIZES,
+            # Empty unless a custom size is active. The select is disabled when
+            # it is, so the two controls cannot both submit `detail_size` — the
+            # field owns the parameter while it holds a value.
+            "custom_size": "" if size in NAMED_SIZES else size,
             "max_blur": settings.GALLERY_MAX_BLUR,
             # The gallery's own state, carried through the form as hidden
             # fields. Submitting the panel must not lose where the user came

@@ -150,8 +150,13 @@ main {
   color: var(--muted);
 }
 
-.control select,
-.control input[type="number"] {
+/* Named rather than matched by element. `.control select` styled the selects
+ * and nothing else, so the checkbox, the range, and the value readout — all
+ * three named in docs/ui/design-system.md § Controls — rendered as browser
+ * defaults beside them. */
+.control__field,
+.control input[type="number"],
+.control input[type="text"] {
   font: inherit;
   font-size: var(--text-sm);
   color: var(--fg);
@@ -162,11 +167,65 @@ main {
   min-height: 2.25rem;
 }
 
+.control__field:hover,
+.control input[type="text"]:hover {
+  border-color: var(--accent);
+}
+
+/* Sized to its content: "1200x900" is nine characters, and a full-width text
+ * field beside three short controls reads as the most important one. */
+.control__field--narrow {
+  width: 7rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.control__field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sized in its own right rather than left at the browser's default, which is
+ * around 13px and easy to miss against a 14px label. */
+.control__check {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
+  margin: 0;
+  cursor: pointer;
+}
+
+.control__range {
+  width: 9rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* The live readout beside the blur slider. Monospace so the number does not
+ * shift the label as it changes from 9 to 10 — values read as data, per the
+ * design system's rule for parameter values. */
+.control__value {
+  font: var(--text-sm) / 1 var(--font-mono);
+  color: var(--fg);
+  background: var(--surface-raised);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem var(--space-2);
+  min-width: 1.75rem;
+  display: inline-block;
+  text-align: center;
+}
+
 .control--check {
   flex-direction: row;
   align-items: center;
   gap: var(--space-2);
   min-height: 2.25rem;
+}
+
+/* The label sits after the checkbox, so the whole pair reads as one target. */
+.control--check .control__label {
+  cursor: pointer;
 }
 
 /* A non-default value is visibly active. The form re-renders from the URL on
@@ -341,15 +400,25 @@ main {
   }
 }
 
+/* Never upscaled. `width: 100%` stretched every image to the column, so a
+ * 200px "small" and an 800px "large" rendered identically at 724px — choosing
+ * a size fetched the right bytes and appeared to do nothing.
+ *
+ * `max-width` in place of `width` lets the image take its natural size when
+ * that is smaller than the column, and shrink to fit when it is larger. `auto`
+ * height keeps a non-square custom size in proportion. */
 .detail__image {
-  width: 100%;
+  max-width: 100%;
+  height: auto;
   border-radius: var(--radius-lg);
   border: var(--border-width) solid var(--border);
   background: var(--placeholder);
 }
 
 /* Parameters panel: reports the values actually used, which is why size reads
- * "large" even when the gallery was showing "small" (F4.4). */
+ * "large" even when the gallery was showing "small" (F4.4) — and, since the
+ * ADR 7 amendment, sets them too. It is a <form> wrapping a <dl>, so the grid
+ * belongs to the list rather than to the panel. */
 .params {
   background: var(--surface);
   border: var(--border-width) solid var(--border);
@@ -357,9 +426,28 @@ main {
   padding: var(--space-4);
   margin: 0;
   font-size: var(--text-sm);
+}
+
+.params__list {
+  margin: 0;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+}
+
+/* Each row pairs a label with the control that sets it, so the value shown is
+ * the value the control holds. */
+.params__list dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.params__value {
+  font: var(--text-sm) / 1 var(--font-mono);
+  color: var(--muted);
 }
 
 .params dt {

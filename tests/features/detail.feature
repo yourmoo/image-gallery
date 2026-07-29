@@ -127,6 +127,27 @@ Feature: Image detail view
       | medium |
       | large  |
 
+  # The size must be visible, not merely fetched. Stretching every image to
+  # the column made a 200px "small" and an 800px "large" render identically,
+  # so choosing a size appeared to do nothing at all.
+  @F4_4 @stage11
+  Scenario Outline: A smaller size is displayed smaller, not upscaled
+    When I open the detail page for image 7
+    And I choose the "<size>" size on the detail page
+    Then the image is displayed no wider than <pixels> pixels
+
+    Examples:
+      | size   | pixels |
+      | small  | 200    |
+      | medium | 400    |
+
+  @F4_4 @stage12
+  Scenario: Entering a custom size on the detail page
+    When I open the detail page for image 7
+    And I enter the custom size "1200x900"
+    Then the image is rendered at 1200 by 900 pixels
+    And the page shows the size "1200x900"
+
   @F4_4 @stage11
   Scenario: Turning grayscale on from the detail page
     When I open the detail page for image 7

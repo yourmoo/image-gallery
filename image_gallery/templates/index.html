@@ -46,6 +46,24 @@ so restyling cannot break a test.
       </select>
     </div>
 
+    {% comment %}
+    A field rather than more options: WxH cannot be enumerated, and the backend
+    has always accepted custom dimensions bounded by configuration
+    (docs/adr/0010-configurable-and-custom-sizes.md). Without this the feature
+    was reachable only by editing the URL.
+
+    Its value is the active size when that is a custom one, so a form
+    re-rendered from the URL still shows what is applied — a select cannot do
+    that for a value it does not list.
+    {% endcomment %}
+    <div class="control" data-active="{% if custom_size %}true{% else %}false{% endif %}">
+      <label class="control__label" for="custom_size">Custom size</label>
+      <input class="control__field control__field--narrow" type="text"
+             id="custom_size" name="custom_size" data-testid="custom-size-control"
+             value="{{ custom_size }}" placeholder="640x480"
+             inputmode="text" autocomplete="off" size="9">
+    </div>
+
     <div class="control control--check" data-active="{{ grayscale|yesno:'true,false' }}">
       <input class="control__check" type="checkbox" id="grayscale" name="grayscale"
              data-testid="grayscale-control"{% if grayscale %} checked{% endif %}>
