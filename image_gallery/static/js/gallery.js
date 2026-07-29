@@ -165,9 +165,34 @@ function render() {
   grid.parentNode.insertBefore(buildPagination(bounds.page, pages, params), grid.nextSibling);
 }
 
+/* Controls apply instantly — no Apply button, which is the ordinary CSR
+ * expectation and removes a click from every change (docs/ui/ui-notes.md).
+ *
+ * Changing the count returns to page 1 deliberately: at 50 per page there is
+ * no page 7, so keeping the number would land the user on a page that no
+ * longer exists and trigger a correction they did not ask for.
+ *
+ * A full navigation rather than a re-render in place. The server validates the
+ * new value, the address bar stays truthful, and the result is bookmarkable —
+ * all of which a client-side re-render would have to reimplement.
+ */
+function wireControls() {
+  const count = document.querySelector('[data-testid="count-control"]');
+  if (!count) return;
+
+  count.addEventListener("change", () => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("count", count.value);
+    params.delete("page");
+    params.delete("notice");
+    window.location.search = params.toString();
+  });
+}
+
 if (grid) {
   const tokens = new URLSearchParams(window.location.search).getAll("notice");
   for (const message of noticeMessages(tokens)) showNotice(message);
 
   render();
+  wireControls();
 }

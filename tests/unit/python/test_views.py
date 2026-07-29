@@ -70,6 +70,36 @@ def test_the_shell_publishes_a_reversed_image_url_template(client):
     assert f'data-image-url-template="{reverse("image", args=[0])}"' in body
 
 
+def test_the_shell_renders_a_real_count_control(client):
+    """F2.5 says the count is changeable "by the user via UI".
+
+    The requirement most easily under-delivered: a query parameter a test can
+    set is not a control. It is server-rendered rather than built by JS so it
+    exists before any script runs and cannot be lost to a scripting failure.
+    """
+    body = client.get(reverse("index")).content.decode()
+
+    assert 'data-testid="count-control"' in body
+    assert "<select" in body
+
+
+def test_the_count_control_offers_exactly_the_configured_allow_list(client):
+    """Not a hardcoded 10/20/50: the list is deployment configuration, and the
+    control, the validator, and the contract must all read the same one."""
+    body = client.get(reverse("index")).content.decode()
+
+    for value in (10, 20, 50):
+        assert f'value="{value}"' in body
+
+
+def test_the_active_count_is_marked_selected(client):
+    """The form is re-rendered from the URL on every navigation, so which value
+    is active has to be visible on load (docs/ui/ui-notes.md § States)."""
+    body = client.get(reverse("index"), {"count": "20"}).content.decode()
+
+    assert '<option value="20" selected' in body
+
+
 def test_the_shell_carries_no_image_data(client):
     """Client-side rendering: tiles are built in the browser, not the template."""
     assert "image-tile" not in client.get(reverse("index")).content.decode()

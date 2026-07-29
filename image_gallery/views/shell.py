@@ -48,6 +48,10 @@ class AppShellView(View):
             "page": result.page,
             "count": result.count,
             "catalogue_size": settings.GALLERY_CATALOGUE_SIZE,
+            # The count control's options. F2.5 requires a real control, and
+            # rendering it server-side from the same setting the validator uses
+            # means the widget cannot offer a value the server would reject.
+            "page_sizes": settings.GALLERY_PAGE_SIZES,
             # Drives `data-size` on the grid, which selects the cell floor
             # (docs/ui/design-system.md). Always the configured default at this
             # stage: `size` is not validated until the variation stages, and

@@ -24,6 +24,29 @@ so restyling cannot break a test.
   treatment. Both are set here rather than by JS so the grid has its final
   geometry before any script runs.
   {% endcomment %}
+  {% comment %}
+  Controls, per docs/ui/design-system.md § Controls. Server-rendered rather
+  than built by JavaScript: F2.5 requires a real control on the page, and one
+  that exists in the document survives a scripting failure and is visible to a
+  reader of the HTML.
+
+  The options come from GALLERY_PAGE_SIZES — the same setting the validator
+  checks against — so the widget cannot offer a value the server would reject.
+
+  No form element and no Apply button: under CSR there is no submit, so
+  changing a control fires a navigation directly (docs/ui/ui-notes.md).
+  {% endcomment %}
+  <div class="controls" data-testid="controls">
+    <div class="control">
+      <label class="control__label" for="count">Per page</label>
+      <select class="control__field" id="count" name="count" data-testid="count-control">
+        {% for size in page_sizes %}
+          <option value="{{ size }}"{% if size == count %} selected{% endif %}>{{ size }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
   <ul
     data-testid="gallery"
     id="gallery"
