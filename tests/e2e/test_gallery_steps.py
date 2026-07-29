@@ -99,12 +99,17 @@ def open_gallery_again(scenario_state):
     wait_for_images(scenario_state)
 
 
-@when(parsers.parse('I open the gallery at page "{page}"'))
+@when(parsers.re(r'I open the gallery at page "(?P<page>[^"]*)"'))
 def open_gallery_at_page(page: str, scenario_state):
     """Deliberately unvalidated: the string goes into the URL as written.
 
     This is the invalid-page family, so 'abc', '-5' and the empty string must
     reach the application untouched.
+
+    Matched with `parsers.re` rather than `parsers.parse` because `{page}`
+    requires at least one character, so the empty-string example silently
+    failed to bind — `?page=` is a real URL a user can produce, and it was the
+    one case the step claimed to cover but could not.
     """
     goto(scenario_state, f"/?page={page}")
 

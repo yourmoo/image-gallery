@@ -11,9 +11,14 @@ redirects to a corrected URL carrying a notice, and the image endpoints report
 the rejection as a 400. An exception would unwind past the fallback that both
 of them require (docs/adr/0019-validation-errors-carry-a-usable-payload.md).
 
-Only `page` and `count` are validated here today. `size`, `grayscale`, and
-`blur` arrive with the stages that render them; adding them now would mean
-writing rules no test exercises.
+`page`, `count`, and `size` are validated here. `grayscale` and `blur` arrive
+with the stage that renders them.
+
+**A parameter supplied as an empty string is a rejection, not an absence.**
+`?page=` is a value the user gave that cannot be honoured, where omitting
+`page` entirely is the default working as intended. Conflating the two leaves
+`?page=` sitting in the address bar, uncorrected and unexplained — the dead end
+docs/adr/0006-recover-and-explain.md exists to prevent.
 """
 
 from __future__ import annotations
@@ -103,11 +108,13 @@ def validate_count(
 ) -> tuple[int, Rejection | None]:
     """Resolve the per-page image count against its allow-list.
 
-    An absent parameter is not a rejection — it is the default being used as
-    intended. Only a value that was supplied and cannot be honoured is
-    reported, so a first visit carries no notice.
+    An **absent** parameter is not a rejection — it is the default being used
+    as intended, so a first visit carries no notice. A parameter supplied as
+    an empty string is different: the user expressed an intent the application
+    cannot honour, and `?count=` left uncorrected in the address bar with no
+    explanation is exactly the dead end ADR 6 exists to prevent.
     """
-    if raw is None or not str(raw).strip():
+    if raw is None:
         return default, None
 
     parsed = _as_int(raw)
@@ -142,8 +149,11 @@ def validate_page(raw: str | None, last_page: int) -> tuple[int, Rejection | Non
     `?page=abc`, and `?page=999` all recover to page 1 and explain themselves.
     The bound is real because the catalogue is bounded by configuration
     (docs/adr/0004-bounded-catalogue.md).
+
+    `?page=` — supplied but empty — is a rejection rather than an absence, for
+    the reason given on `validate_count`.
     """
-    if raw is None or not str(raw).strip():
+    if raw is None:
         return 1, None
 
     parsed = _as_int(raw)
@@ -178,7 +188,7 @@ def validate_size(
     """
     accepted = f"{', '.join(NAMED_SIZES)}, or WxH between {minimum} and {maximum}"
 
-    if raw is None or not str(raw).strip():
+    if raw is None:
         return default, None
 
     text = str(raw).strip().lower()

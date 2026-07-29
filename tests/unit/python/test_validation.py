@@ -34,12 +34,19 @@ def test_the_three_named_sizes_are_accepted(name):
     assert rejection is None
 
 
-@pytest.mark.parametrize("raw", [None, "", "  "])
-def test_an_absent_size_takes_the_default(raw):
-    size, rejection = validate_size(raw, default="medium", **SIZE_BOUNDS)
+def test_an_absent_size_takes_the_default():
+    size, rejection = validate_size(None, default="medium", **SIZE_BOUNDS)
 
     assert size == "medium"
     assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["", "  "])
+def test_a_supplied_but_empty_size_is_a_rejection(raw):
+    size, rejection = validate_size(raw, default="medium", **SIZE_BOUNDS)
+
+    assert size == "medium"
+    assert rejection is not None
 
 
 @pytest.mark.parametrize("raw", ["640x480", "1600x1600", "16x16", "200X300"])
@@ -83,16 +90,25 @@ def test_a_rejected_size_names_what_is_accepted():
 # --- count ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("raw", [None, "", "   "])
-def test_absent_count_takes_the_default_without_complaint(raw):
+def test_an_absent_count_takes_the_default_without_complaint():
     """An unsupplied parameter is the default working as intended.
 
     Reporting it would put a notice on every first visit to the gallery.
     """
-    count, rejection = validate_count(raw, allowed=PAGE_SIZES, default=10)
+    count, rejection = validate_count(None, allowed=PAGE_SIZES, default=10)
 
     assert count == 10
     assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+def test_a_supplied_but_empty_count_is_a_rejection(raw):
+    """Same distinction as `page`: supplied-but-unusable is not absent."""
+    count, rejection = validate_count(raw, allowed=PAGE_SIZES, default=10)
+
+    assert count == 10
+    assert rejection is not None
+    assert rejection.parameter == "count"
 
 
 @pytest.mark.parametrize("raw,expected", [("10", 10), ("20", 20), ("50", 50)])
@@ -103,7 +119,7 @@ def test_allow_listed_counts_are_accepted(raw, expected):
     assert rejection is None
 
 
-@pytest.mark.parametrize("raw", ["7", "0", "-10", "abc", "10.5", "1e1", "  "])
+@pytest.mark.parametrize("raw", ["7", "0", "-10", "abc", "10.5", "1e1"])
 def test_a_count_outside_the_allow_list_falls_back_and_is_reported(raw):
     """Includes forms that parse as numbers but are not offered.
 
@@ -114,10 +130,9 @@ def test_a_count_outside_the_allow_list_falls_back_and_is_reported(raw):
     count, rejection = validate_count(raw, allowed=PAGE_SIZES, default=10)
 
     assert count == 10
-    if raw.strip():
-        assert rejection is not None
-        assert rejection.parameter == "count"
-        assert rejection.value == raw
+    assert rejection is not None
+    assert rejection.parameter == "count"
+    assert rejection.value == raw
 
 
 def test_a_rejected_count_names_what_is_accepted():
@@ -166,12 +181,28 @@ def test_a_nonsensical_count_does_not_divide_by_zero():
 # --- page ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("raw", [None, "", "   "])
-def test_absent_page_is_page_one_without_complaint(raw):
-    page, rejection = validate_page(raw, last_page=10)
+def test_an_absent_page_is_page_one_without_complaint():
+    """Not supplying a parameter is the default working as intended."""
+    page, rejection = validate_page(None, last_page=10)
 
     assert page == 1
     assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+def test_a_supplied_but_empty_page_is_a_rejection_not_an_absence(raw):
+    """`?page=` is a parameter the user gave with an unusable value.
+
+    Distinct from omitting it: the user expressed an intent the application
+    cannot honour, so it is corrected and explained like any other bad value.
+    Treating the two alike leaves `?page=` sitting in the address bar with no
+    notice, which the Gherkin asserts against directly.
+    """
+    page, rejection = validate_page(raw, last_page=10)
+
+    assert page == 1
+    assert rejection is not None
+    assert rejection.parameter == "page"
 
 
 @pytest.mark.parametrize("raw,expected", [("1", 1), ("2", 2), ("10", 10)])
