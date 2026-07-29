@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -48,7 +49,27 @@ h1{font-size:1.75rem;margin:0 0 .25rem;letter-spacing:-.02em}
 .scenario{border-top:1px solid #F2F2EF;padding:.75rem 1rem}
 .scenario:first-of-type{border-top:0}
 .scenario>h3{font-size:.9375rem;font-weight:600;margin:0 0 .5rem;
- display:flex;gap:.5rem;align-items:baseline}
+ display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.tags{display:flex;gap:.25rem;flex-wrap:wrap;margin-left:auto}
+.tag{font-size:.6875rem;font-weight:600;letter-spacing:.02em;
+ padding:.125rem .4375rem;border-radius:4px;border:1px solid #E2E2DD;
+ color:#6E6E68;background:#F7F7F5;font-variant-numeric:tabular-nums}
+.tag--req{border-color:#DFE6F0;background:#F5F8FC;color:#2C5385}
+.summary{border:1px solid #E2E2DD;border-radius:8px;background:#fff;
+ margin-bottom:1.5rem;overflow:hidden}
+.summary>h2{font-size:1rem;margin:0;padding:.75rem 1rem;background:#F2F2EF;
+ border-bottom:1px solid #E2E2DD}
+.summary table{width:100%;border-collapse:collapse;font-size:.875rem}
+.summary th{text-align:left;font-weight:600;color:#6E6E68;font-size:.8125rem;
+ padding:.5rem 1rem;border-bottom:1px solid #F2F2EF}
+.summary td{padding:.4375rem 1rem;border-bottom:1px solid #F2F2EF}
+.summary tr:last-child td{border-bottom:0}
+.bar{display:inline-flex;height:.5rem;width:8rem;border-radius:999px;
+ overflow:hidden;background:#F2F2EF;vertical-align:middle;margin-right:.5rem}
+.bar i{display:block;height:100%}
+.bar .ok{background:#8FBF92}
+.bar .no{background:#D89A9A}
+.count{font-variant-numeric:tabular-nums;color:#6E6E68;font-size:.8125rem}
 .badge{font-size:.6875rem;text-transform:uppercase;letter-spacing:.08em;
  padding:.125rem .5rem;border-radius:999px;font-weight:600}
 .badge--passed{background:#E8F3E8;color:#2F6B33}
@@ -75,9 +96,58 @@ def _status(steps: list[dict]) -> str:
     return "passed"
 
 
+def _tags(element: dict) -> list[str]:
+    """Tag names on a scenario, in the order they were written.
+
+    pytest-bdd emits Gherkin tags as ``[{"name": "F2_7", "line": 38}, ...]``.
+    """
+    return [t["name"] for t in element.get("tags", []) if t.get("name")]
+
+
+def _is_requirement(tag: str) -> bool:
+    """A requirement id from docs/core-features.md, as tagged: F2_7."""
+    return bool(re.fullmatch(r"F\d+_\d+", tag))
+
+
+def _requirement_summary(rows: list[tuple[str, str]]) -> str:
+    """Pass/fail per requirement, so coverage is legible without reading each
+    scenario.
+
+    Only requirement tags appear: stage tags describe build order, which is a
+    property of the plan rather than of the run.
+    """
+    by_requirement: dict[str, Counter[str]] = {}
+    for tag, status in rows:
+        by_requirement.setdefault(tag, Counter())[status] += 1
+
+    if not by_requirement:
+        return ""
+
+    lines = []
+    for tag in sorted(by_requirement, key=lambda t: [int(n) for n in t[1:].split("_")]):
+        counts = by_requirement[tag]
+        passed, total = counts["passed"], sum(counts.values())
+        pct = (passed / total * 100) if total else 0
+        failed_pct = 100 - pct
+        lines.append(
+            f"<tr><td><span class='tag tag--req'>{html.escape(tag)}</span></td>"
+            f"<td><span class='bar'>"
+            f"<i class='ok' style='width:{pct:.0f}%'></i>"
+            f"<i class='no' style='width:{failed_pct:.0f}%'></i></span>"
+            f"<span class='count'>{passed}/{total}</span></td></tr>"
+        )
+
+    return (
+        "<section class='summary'><h2>Requirement coverage</h2>"
+        "<table><thead><tr><th>Requirement</th><th>Scenarios passing</th></tr>"
+        f"</thead><tbody>{''.join(lines)}</tbody></table></section>"
+    )
+
+
 def render(report: list[dict]) -> str:
     counts: Counter[str] = Counter()
     body: list[str] = []
+    requirement_rows: list[tuple[str, str]] = []
 
     for feature in report:
         scenarios: list[str] = []
@@ -86,6 +156,18 @@ def render(report: list[dict]) -> str:
             steps = element.get("steps", [])
             status = _status(steps)
             counts[status] += 1
+
+            tags = _tags(element)
+            for tag in tags:
+                if _is_requirement(tag):
+                    requirement_rows.append((tag, status))
+
+            tag_html = "".join(
+                f'<span class="tag{" tag--req" if _is_requirement(t) else ""}">'
+                f"{html.escape(t)}</span>"
+                for t in tags
+            )
+            tag_block = f'<span class="tags">{tag_html}</span>' if tag_html else ""
 
             rows = "".join(
                 f'<li><span class="kw">{html.escape(s.get("keyword", "").strip())}</span>'
@@ -102,7 +184,8 @@ def render(report: list[dict]) -> str:
             scenarios.append(
                 f'<div class="scenario"><h3>'
                 f'<span class="badge badge--{status}">{status}</span>'
-                f'{html.escape(element.get("name", "(unnamed)"))}</h3>'
+                f'{html.escape(element.get("name", "(unnamed)"))}'
+                f"{tag_block}</h3>"
                 f'<ul class="steps">{rows}</ul>{errors}</div>'
             )
 
@@ -135,7 +218,8 @@ def render(report: list[dict]) -> str:
         f"<h1>Scenario report</h1>"
         f'<p class="sub">{total} scenario{"s" if total != 1 else ""} '
         f'across {len(report)} feature{"s" if len(report) != 1 else ""}</p>'
-        f'<div class="totals">{chips}</div>{"".join(body)}'
+        f'<div class="totals">{chips}</div>'
+        f'{_requirement_summary(requirement_rows)}{"".join(body)}'
         f"<footer>Generated from Cucumber JSON emitted by pytest-bdd.</footer>"
         f"</main></body></html>"
     )

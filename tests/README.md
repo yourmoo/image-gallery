@@ -335,6 +335,17 @@ and unreadable; `cucumber.json` is machine-readable but not for humans. The
 renderer is a small local script (`tests/cucumber_html.py`) rather than a
 dependency: the only PyPI option is an alpha release.
 
+It opens with a **requirement coverage table** — one row per `Fn_m`, showing how
+many of that requirement's scenarios pass. That is the fastest answer to "how
+far along is F3.6?", and it is derived from the run rather than maintained by
+hand. Each scenario also carries its tags inline, so a failing row shows which
+requirement and build stage it belongs to without cross-referencing the feature
+file.
+
+Stage tags appear on scenarios but not in the summary table: a stage describes
+when something can be built, which is a property of the plan rather than of the
+run.
+
 Add `--gherkin-terminal-reporter` for Given/When/Then output instead of dots —
 useful for seeing which step failed.
 
