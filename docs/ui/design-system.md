@@ -316,9 +316,9 @@ never mutually exclusive in the UI.
 ```html
 <ul class="gallery" data-size="medium" data-state="ready" data-testid="gallery">
   <li class="tile">
-    <a class="tile__link" href="/images/1084/?size=medium">
+    <a class="tile__link" href="/images/1084?size=medium">
       <span class="tile__frame">
-        <img class="tile__image" src="/img/1084/?size=medium" alt="Image 1084"
+        <img class="tile__image" src="/img/1084?size=medium" alt="Image 1084"
              width="400" height="400" loading="lazy" data-loaded="false">
       </span>
     </a>
@@ -392,7 +392,7 @@ filters.
 ```html
 <a class="detail__back" href="/?page=4&amp;size=small">← Back to gallery</a>
 <div class="detail">
-  <img class="detail__image" src="/img/1084/?size=large" alt="Image 1084">
+  <img class="detail__image" src="/img/1084?size=large" alt="Image 1084">
   <dl class="params" data-testid="params">
     <dt>Identifier</dt><dd>1084</dd>
     <dt>Size</dt><dd>large</dd>
@@ -424,29 +424,37 @@ loading placeholder.
 reflows the grid.
 
 ```html
-<li class="tile tile--failed" data-testid="tile-failed">
-  <span class="tile__frame">
+<li class="tile tile--failed" data-testid="image-tile">
+  <span class="tile__frame" data-testid="image-failed">
     <span class="tile__fail">
       <span class="tile__fail-dot" aria-hidden="true"></span>
       Couldn't load
-      <a class="tile__retry" href="/img/1084/?size=medium">Retry</a>
     </span>
   </span>
   <p class="tile__caption">#1084</p>
 </li>
 ```
 
-Dashed `--warn-border` on `--warn-bg` with a `--warn` dot — deliberately unlike
-the striped placeholder. Retry re-requests that one image; it does not re-fetch
-the page.
+Dashed `--warn-border` on `--warn-bg` — deliberately unlike the striped
+placeholder, because a failed tile must never read as one still loading. The
+frame keeps its aspect ratio, so one bad upstream call never reflows the grid.
+
+**No Retry link, as built.** It was specified here and dropped: the proxy
+already retries upstream itself, serves stale bytes when it has them, and a
+per-tile retry is a second recovery mechanism competing with the first. A
+reload re-requests the failed tiles and nothing else, since the successful ones
+are cached.
 
 **Degraded** — upstream unavailable, cache warm.
 
+The provider is never named: the browser must not learn it exists
+([ADR 9](../adr/0009-url-vocabularies.md)), so the banner reports the effect
+rather than the cause.
+
 ```html
-<div class="banner banner--warn" role="status" data-testid="degraded">
-  picsum.dev isn't responding — showing cached images from 4 minutes ago.
-  Filters still apply.
-</div>
+<p class="notice notice--warn" role="status" data-testid="notice">
+  3 images could not be loaded.
+</p>
 ```
 
 Not dismissible while the condition holds; dismissing it would hide that the

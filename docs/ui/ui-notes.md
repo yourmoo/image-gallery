@@ -43,17 +43,26 @@ From the architecture:
 
 ## What already exists
 
-`static/css/app.css` establishes the vocabulary to build on. Do not start a
-parallel system:
+`static/css/tokens.css` holds every primitive and `static/css/app.css` the
+components built from them. Nothing hardcodes a value. Do not start a parallel
+system:
 
-- Custom properties `--bg`, `--fg`, `--muted`, `--border`
-- `color-scheme: light` — **light only**, no dark override (see Handover below)
+- The full palette, spacing, type, radius, and motion scales of
+  [design-system.md](design-system.md), which `tokens.css` was reconciled with
+  on 2026-07-29
+- `color-scheme: light` — **light only**, no dark override
 - `main` capped at `70rem`, centred; `.site-header` with a bottom rule
-- System font stack
+- Components for the grid, tiles (pending, loaded, failed), notices (cool and
+  warm), pagination, controls, and the detail view
 
-`templates/base.html` provides `title`, `heading`, and `content` blocks.
-`data-testid` attributes are already used as test hooks — keep adding them for
-anything a test needs to find, so tests never depend on styling classes.
+`templates/base.html` provides `title`, `heading`, and `content` blocks;
+`index.html` is the gallery shell and `detail.html` the single-image page.
+
+`data-testid` attributes are the contract the browser suite binds to — keep
+adding them for anything a test needs to find, so tests never depend on styling
+classes. The full list is documented at the top of
+[tests/e2e/test_gallery_steps.py](../../tests/e2e/test_gallery_steps.py) and
+[tests/e2e/test_detail_steps.py](../../tests/e2e/test_detail_steps.py).
 
 ## Control inventory
 
@@ -155,105 +164,71 @@ the first row of images off a phone screen.
 **Detail page** — image and parameters panel; side by side on wide viewports,
 stacked on narrow. Include the back link at a predictable position.
 
-## Handover — resolve before building
+## Reconciliation — resolved
 
-[design-system.md](design-system.md) is the asset layer for this file, and it
-has **diverged from the CSS actually on disk**. The three items below are
-blocking: each one has a developer reaching for something that is documented but
-absent, or building against markup that does not match the architecture.
+[design-system.md](design-system.md) is the asset layer for this file. The two
+had diverged badly enough that three items were listed here as **blocking**:
+tokens a component referenced but the CSS did not define, a palette that was a
+different design rather than a drifted one, and markup written in Django
+template syntax for an application that renders in the browser.
 
-Everything else in both documents stands. This is reconciliation, not a redesign
-— the component inventory, the error matrix, and the state rules are all correct
-and should be preserved as they are.
+**All three were resolved while building the gallery, 2026-07-29.** The record
+is kept because the reasoning still matters — particularly which document won,
+and why.
 
-### 1. Light only — dark mode is removed
+### `design-system.md` was the more accurate document
 
-**Decided.** The interface is light only. `design-system.md` Principle 6 is
-correct; `tokens.css` and this file were stale and have been corrected here.
+Twice, and it is worth stating plainly: when the CSS on disk disagreed with the
+design system, **the design system turned out to be right**.
 
-To action in [`static/css/tokens.css`](../../image_gallery/static/css/tokens.css):
+- The token palette. `tokens.css` carried a different `--bg`, `--accent`,
+  radius scale, and motion timing, and was missing `--accent-ink`,
+  `--placeholder-alt`, the whole `--warn` family, `--space-8`, `--text-xs`, and
+  `--radius-pill`. The document was taken as the intent and the CSS brought up
+  to it, preserving `--bg`, `--fg`, `--muted`, and `--border` by name because
+  the baseline markup already used them.
+- The URL split. The design system's component blocks had `/images/<id>` for
+  the detail **page** and `/img/<id>` for the image **bytes** from the start.
+  The proxy was built on `/images/<id>`, which collided with the detail page —
+  one path cannot be both. The design system had it right and the code moved.
 
-- Change `color-scheme: light dark` (line 14) to `color-scheme: light`.
-- Delete the whole `@media (prefers-color-scheme: dark)` block (lines 92–117).
-- Keep the `prefers-reduced-motion` block. That one stays.
+The `--warn` family was the one that mattered most: the failed-tile state
+depends on it, and that state is mandatory, since a failed tile must never look
+like one still loading. It is now `--warn-bg` with a dashed `--warn-border`,
+against a striped neutral placeholder — visibly different at a glance.
 
-No `app.css` change is needed — it carries no dark rules.
+### The markup blocks are plain HTML
 
-### 2. Tokens: the doc and the CSS are different designs
+They were Django template syntax; they are now plain HTML with a note on which
+attributes JavaScript sets at runtime. The structure was always right.
 
-`design-system.md` documents a palette and scale that `tokens.css` does not
-implement. Not drift at the margins — the core values differ:
+**Controls apply instantly — decided, and built.** No Apply button: under CSR
+there is no submit, and a control fires a navigation on `change`.
 
-| Token | design-system.md | tokens.css |
-| --- | --- | --- |
-| `--bg` | `#FDFDFC` | `#ffffff` |
-| `--accent` | `#3B6EA8` | `#1f5fa8` |
-| `--radius-sm` | 6px | 3px |
-| `--radius` | 8px | 6px |
-| `--duration` | 160ms | 200ms |
-| `--ease` | `ease-out` | `cubic-bezier(0.2, 0, 0.2, 1)` |
-| Spacing | 8 steps, 4–56px | 7 steps, in `rem` |
-| `--text-xl` | 44px | 1.25rem (20px) |
-| Notices | cool/blue, plus a separate `--warn` family | one warm amber family |
+Blur turned out not to need the debounce this section originally specified.
+A range fires `input` continuously while dragging and `change` once when the
+drag ends, so the readout updates on `input` (free, no network) and the
+navigation happens on `change`. Dragging the slider costs one request rather
+than eleven, with no timer to tune.
 
-**Absent from `tokens.css` entirely** — every one of these is referenced by a
-component in `design-system.md`:
+### Still unspecified
 
-`--accent-ink`, `--placeholder-alt`, `--warn`, `--warn-bg`, `--warn-border`,
-`--space-8`, `--text-xs`, `--radius-pill`
+- **The `--image-*` tokens are ambiguous under custom sizes.** The comment
+  reads "CSS display dimensions; the proxy serves matching pixel dimensions",
+  but a custom `WxH` size ([ADR 10](../adr/0010-configurable-and-custom-sizes.md))
+  is not one of the three named values. In practice the grid falls back to
+  `--cell-medium` and the served dimensions govern; the tokens name the common
+  cases rather than every case.
+- **The empty state and the unreachable page** have no markup block. Neither is
+  reachable in the current application — the catalogue is a configured constant
+  and every failure degrades per tile — so they are unwritten rather than
+  missing. The failed tile and degraded banner, which *are* reachable, are both
+  built and covered by scenarios.
 
-The `--warn` family is the one that hurts: the failed-tile state depends on it,
-that state is mandatory (a failed tile must never look like a loading tile), and
-it has its own entry in the verification checklist.
-
-**Take `design-system.md` as the intent and bring `tokens.css` up to it** — it
-is the newer and more complete design, and it is the one reasoned through the
-light-only palette. Preserve `--bg`, `--fg`, `--muted`, `--border` by name; the
-baseline markup already uses them.
-
-### 3. The markup blocks are server-rendered; the app is not
-
-Every component block in `design-system.md` is written in Django template syntax
-— `{% url 'gallery' %}`, `{{ image.url }}`, `{{ grayscale|yesno:"on,off" }}`,
-`{% if has_previous %}`. The application is **client-side rendered**
-([ADR 2](../adr/0002-client-side-rendering.md), and settled). JavaScript fetches
-JSON and builds the DOM.
-
-The structure of those blocks is right and should be kept. What has to change is
-the framing:
-
-- Rewrite them as **plain HTML**, with a note on which attributes JavaScript
-  sets at runtime (`data-active`, `data-loaded`, `data-size`, `src`, `href`).
-- **The controls block is the one that actively misleads.** It is a
-  `<form method="get" action="…">` with an Apply button. Under CSR there is no
-  form submit — controls fire a `fetch` and call `history.pushState`.
-
-  **Decided 2026-07-29: instant apply, no Apply button.** Each control fires on
-  `change`; blur debounces at 250 ms so dragging the slider does not fire a
-  request per step. This is the usual CSR pattern, and it is what the existing
-  step definition already assumes — `choose_count` calls `select_option` and
-  waits for the network to settle, with no button to click
-  ([tests/e2e/test_gallery_steps.py](../../tests/e2e/test_gallery_steps.py)).
-  A form element may still wrap the controls for grouping and keyboard
-  semantics, but its submit event is prevented.
-- Pagination `{% if %}` guards become "JS renders no element at all" — the
-  Gherkin asserts *absence*, not a disabled state.
-
-### 4. Not yet specified
-
-Lower priority than the three above, but needed before the UI is finished:
-
-- **No JS module or state structure.** CSR means something owns URL↔state sync,
-  the fetch lifecycle, and the render loop. Nothing describes how that is
-  organised, and it is the largest unwritten piece of the front end.
-- **No markup for the failure states.** The failed tile, degraded banner, empty
-  state, and unreachable page are described in prose only, while every other
-  component gets a markup block. They carry real requirements and deserve the
-  same treatment.
-- **`--image-*` tokens are ambiguous under custom sizes.** The comment reads
-  "CSS display dimensions; the proxy serves matching pixel dimensions", but
-  custom `WxH` sizes ([ADR 10](../adr/0010-configurable-and-custom-sizes.md)) mean
-  the display size is not always one of the three named values.
+The JS module structure this section once listed as unwritten now exists:
+`static/js/derive.js` holds the pure logic and is unit-tested without a DOM,
+and `static/js/gallery.js` holds the DOM wiring. See
+[tests/unit/js/README.md](../../tests/unit/js/README.md).
 
 ## Out of scope
 
