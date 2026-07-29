@@ -17,7 +17,10 @@ import {
   imageIds,
   imageUrl,
   noticeMessages,
+  pageUrl,
+  pagination,
   readBounds,
+  totalPages,
 } from "../../../image_gallery/static/js/derive.js";
 
 describe("imageIds", () => {
@@ -125,6 +128,96 @@ describe("imageUrl", () => {
     const urls = new Set([1, 2, 3].map((id) => imageUrl(template, id, {})));
 
     assert.equal(urls.size, 3);
+  });
+});
+
+describe("totalPages", () => {
+  // Mirrors total_pages in image_gallery/validation.py, case for case. The two
+  // must agree or the client will offer a next link to a page the server
+  // rejects.
+  it("divides the catalogue by the page size", () => {
+    assert.equal(totalPages(100, 10), 10);
+    assert.equal(totalPages(100, 20), 5);
+    assert.equal(totalPages(100, 50), 2);
+  });
+
+  it("rounds up for a short final page", () => {
+    assert.equal(totalPages(95, 10), 10);
+    assert.equal(totalPages(101, 10), 11);
+  });
+
+  it("gives an empty catalogue one page rather than none", () => {
+    // Zero would make every page number invalid, including the default.
+    assert.equal(totalPages(0, 10), 1);
+  });
+});
+
+describe("pageUrl", () => {
+  it("sets the page number", () => {
+    assert.equal(pageUrl(3, new URLSearchParams()), "?page=3");
+  });
+
+  it("keeps the active size and filters", () => {
+    // F2.3 — the most easily broken pagination requirement. Losing these on
+    // page 2 is the classic gallery bug: filters silently reset as you page.
+    const current = new URLSearchParams("size=large&grayscale=1&blur=4");
+    const url = pageUrl(2, current);
+
+    assert.ok(url.includes("size=large"));
+    assert.ok(url.includes("grayscale=1"));
+    assert.ok(url.includes("blur=4"));
+    assert.ok(url.includes("page=2"));
+  });
+
+  it("replaces the existing page rather than appending a second one", () => {
+    const url = pageUrl(5, new URLSearchParams("page=2&size=small"));
+
+    assert.equal(url.match(/page=/g).length, 1);
+    assert.ok(url.includes("page=5"));
+  });
+
+  it("drops a notice from the previous navigation", () => {
+    // The banner explained a correction that has already been made; carrying
+    // it to the next page would re-explain something the user has moved past.
+    const url = pageUrl(2, new URLSearchParams("notice=invalid_page&size=large"));
+
+    assert.ok(!url.includes("notice"));
+    assert.ok(url.includes("size=large"));
+  });
+});
+
+describe("pagination", () => {
+  it("offers no previous link on the first page", () => {
+    // Absence, not a disabled state: the Gherkin asserts the element is not
+    // rendered at all (docs/ui/design-system.md § Pagination).
+    const links = pagination(1, 10);
+
+    assert.equal(links.previous, null);
+    assert.equal(links.next, 2);
+  });
+
+  it("offers no next link on the last page", () => {
+    const links = pagination(10, 10);
+
+    assert.equal(links.previous, 9);
+    assert.equal(links.next, null);
+  });
+
+  it("offers both in the middle", () => {
+    const links = pagination(5, 10);
+
+    assert.deepEqual([links.previous, links.next], [4, 6]);
+  });
+
+  it("offers neither when the collection fits on one page", () => {
+    const links = pagination(1, 1);
+
+    assert.equal(links.previous, null);
+    assert.equal(links.next, null);
+  });
+
+  it("reports the position for the status text", () => {
+    assert.equal(pagination(4, 7).status, "Page 4 of 7");
   });
 });
 

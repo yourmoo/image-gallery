@@ -52,6 +52,45 @@ export function readBounds(dataset) {
   return { page, count, catalogueSize };
 }
 
+/* How many pages a catalogue of this size yields at this page size.
+ *
+ * Mirrors `total_pages` in image_gallery/validation.py. At least 1: an empty
+ * catalogue still has a page 1 to render, and returning 0 would make every
+ * page number invalid including the default. */
+export function totalPages(catalogueSize, count) {
+  if (count <= 0) return 1;
+  return Math.max(1, Math.ceil(catalogueSize / count));
+}
+
+/* The URL for another page, keeping whatever is currently active.
+ *
+ * F2.3: size, grayscale, and blur survive the move. Losing them on page 2 is
+ * the classic gallery bug — filters that silently reset as you page — and it
+ * is why the Gherkin asserts on the link's href rather than on where it lands.
+ *
+ * `notice` is deliberately dropped: it explained a correction that has already
+ * happened, and carrying it forward would re-explain something the user has
+ * moved past. */
+export function pageUrl(page, currentParams) {
+  const params = new URLSearchParams(currentParams);
+  params.set("page", String(page));
+  params.delete("notice");
+  return `?${params.toString()}`;
+}
+
+/* Which pagination links exist, and the position to display.
+ *
+ * Returns `null` for an end rather than a flag, because the design system
+ * renders no element at all there — the Gherkin asserts absence, not a
+ * disabled state (docs/ui/design-system.md § Pagination). */
+export function pagination(page, pages) {
+  return {
+    previous: page > 1 ? page - 1 : null,
+    next: page < pages ? page + 1 : null,
+    status: `Page ${page} of ${pages}`,
+  };
+}
+
 /* The URL for one tile's image.
  *
  * `template` is built by the server by reversing the `image` route, so no path

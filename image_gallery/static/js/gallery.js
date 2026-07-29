@@ -17,7 +17,15 @@
  * (docs/adr/0009-url-vocabularies.md).
  */
 
-import { imageIds, imageUrl, noticeMessages, readBounds } from "./derive.js";
+import {
+  imageIds,
+  imageUrl,
+  noticeMessages,
+  pageUrl,
+  pagination,
+  readBounds,
+  totalPages,
+} from "./derive.js";
 
 const grid = document.getElementById("gallery");
 
@@ -90,19 +98,56 @@ function showNotice(message) {
   grid.parentNode.insertBefore(banner, grid);
 }
 
-function render() {
-  const bounds = readBounds(grid.dataset);
+/* Real <a href> elements rather than buttons, so middle-click and copy-link
+ * keep working (docs/ui/design-system.md § Pagination). Every link carries the
+ * active variations, which is F2.3.
+ *
+ * An end renders no element at all — the Gherkin asserts absence, not a
+ * disabled state, so there is nothing here to disable. */
+function buildPagination(page, pages, currentParams) {
+  const nav = document.createElement("nav");
+  nav.className = "pagination";
+  nav.dataset.testid = "pagination";
+  nav.setAttribute("aria-label", "Pagination");
 
-  /* Unusable bounds mean the shell did not render what this script requires.
-   * Failing visibly beats an empty grid, which would look like an empty
-   * catalogue rather than a broken page. */
-  if (bounds === null) {
-    showNotice("The gallery could not be loaded.");
-    return;
+  const links = pagination(page, pages);
+
+  if (links.previous !== null) {
+    nav.appendChild(
+      buildPageLink(links.previous, currentParams, "Previous", "prev-page")
+    );
   }
 
+  const status = document.createElement("span");
+  status.className = "pagination__status";
+  status.dataset.testid = "page-status";
+  status.textContent = links.status;
+  nav.appendChild(status);
+
+  if (links.next !== null) {
+    nav.appendChild(buildPageLink(links.next, currentParams, "Next", "next-page"));
+  }
+
+  return nav;
+}
+
+function buildPageLink(page, currentParams, label, testid) {
+  const link = document.createElement("a");
+  link.className = "pagination__link";
+  link.dataset.testid = testid;
+  link.href = pageUrl(page, currentParams);
+  link.textContent = label;
+  return link;
+}
+
+function render() {
+  const bounds = readBounds(grid.dataset);
   const template = grid.dataset.imageUrlTemplate;
-  if (!template) {
+
+  /* Unusable bounds, or no URL template, mean the shell did not render what
+   * this script requires. Failing visibly beats an empty grid, which would
+   * look like an empty catalogue rather than a broken page. */
+  if (bounds === null || !template) {
     showNotice("The gallery could not be loaded.");
     return;
   }
@@ -114,6 +159,10 @@ function render() {
 
   grid.replaceChildren(fragment);
   grid.dataset.state = "ready";
+
+  const params = new URLSearchParams(window.location.search);
+  const pages = totalPages(bounds.catalogueSize, bounds.count);
+  grid.parentNode.insertBefore(buildPagination(bounds.page, pages, params), grid.nextSibling);
 }
 
 if (grid) {
