@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.error
@@ -31,6 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from playwright.sync_api import expect
+from pytest_bdd import given, parsers, then, when
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPO_ROOT / "compose.e2e.yaml"
@@ -253,13 +256,19 @@ def _wants_cold_cache(request) -> bool:
 def cold_cache(e2e_stack) -> GalleryServer:
     """A `web` service with a guaranteed-empty image cache.
 
-    Restarting the container is the only way to clear a LocMemCache from
-    outside the process. A test-only flush endpoint would put scaffolding into
-    production code, which the project's guardrails rule out. Only the
-    scenarios in COLD_CACHE_SCENARIOS pay the restart cost.
+    The cache is a directory in shared memory, so emptying it is a file
+    deletion rather than a container restart -- faster, and it clears the cache
+    without disturbing anything else about the running service.
+
+    Still done from outside the application: a test-only flush endpoint would
+    put scaffolding into production code, which the project's guardrails rule
+    out.
     """
-    _compose("restart", "web")
-    _wait_for(f"{WEB_BASE_URL}/healthz", what="web")
+    _compose(
+        "exec", "-T", "web",
+        "sh", "-c", "rm -rf /dev/shm/gallery-cache/* 2>/dev/null || true",
+        check=False,
+    )
     return GalleryServer(WEB_BASE_URL)
 
 
@@ -296,3 +305,135 @@ def scenario_state() -> dict:
     ``page`` fixture that depends on it.
     """
     return {}
+
+
+# --------------------------------------------------------------------------
+# Helpers shared by the step modules
+# --------------------------------------------------------------------------
+
+
+def count_api_calls(state: dict) -> None:
+    """Start counting browser -> Django calls for a page's image metadata.
+
+    Registered once per scenario, before the first navigation. This is the
+    browser-visible half of F2.7 -- one metadata call per page view. The other
+    half, that the call reaches no further, is answered by the fake's log.
+    """
+    if state.get("_counting"):
+        return
+    state["_counting"] = True
+    state["api_calls"] = 0
+
+    def _on_request(request) -> None:
+        if "/api/images" in request.url and not re.search(r"/api/images/\d", request.url):
+            state["api_calls"] = state.get("api_calls", 0) + 1
+
+    state["page"].on("request", _on_request)
+
+
+def query_string(state: dict) -> str:
+    """The query accumulated by the 'Given I am viewing ...' steps."""
+    params = state.get("params", {})
+    if not params:
+        return ""
+    return "?" + "&".join(f"{k}={v}" for k, v in params.items())
+
+
+def goto(state: dict, path: str) -> None:
+    """Navigate, remembering the response so status can be asserted later."""
+    count_api_calls(state)
+    state["response"] = state["page"].goto(f"{state['base_url']}{path}")
+
+
+def tiles(page):
+    return page.get_by_test_id("image-tile")
+
+
+def wait_for_images(state: dict) -> None:
+    """Wait until the page has settled after a navigation or control change."""
+    state["page"].wait_for_load_state("networkidle")
+
+
+# --------------------------------------------------------------------------
+# Steps shared by every feature file
+# --------------------------------------------------------------------------
+
+
+@given("the gallery is available")
+def gallery_available(page, gallery_server, fake_upstream, scenario_state):
+    """The default state: a healthy upstream and a server pointed at it.
+
+    Also the step that wires the browser and server into the scenario bag, so
+    every later step has them.
+    """
+    scenario_state["page"] = page
+    scenario_state["base_url"] = gallery_server.base_url
+    scenario_state["upstream"] = fake_upstream
+    scenario_state.setdefault("params", {})
+
+
+@given(parsers.parse("the collection holds {count:d} images"))
+def collection_holds(count: int):
+    """Assert the configured bound rather than populating anything.
+
+    Per docs/adr/0004-bounded-catalogue.md the catalogue is a single integer in
+    settings, not a structure that gets built, so there is nothing to set up.
+    The step exists to make the Background's claim checkable, and fails loudly
+    if the stack's catalogue size drifts from what the feature files assume.
+    """
+    assert count == CATALOGUE_SIZE, (
+        f"the feature files assume a {count}-image catalogue but the stack "
+        f"configures {CATALOGUE_SIZE}"
+    )
+
+
+@given(parsers.parse("I am viewing large grayscale images with blur {blur:d}"))
+def viewing_large_grayscale_blur(blur: int, scenario_state):
+    """Record the active variations; the navigation step applies them."""
+    scenario_state["params"] = {"size": "large", "grayscale": "1", "blur": str(blur)}
+
+
+@when("I open the gallery")
+def open_gallery(scenario_state):
+    goto(scenario_state, f"/{query_string(scenario_state)}")
+    wait_for_images(scenario_state)
+
+
+@when(parsers.parse("I open page {page:d} of the gallery"))
+def open_page(page: int, scenario_state):
+    params = {**scenario_state.get("params", {}), "page": str(page)}
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    goto(scenario_state, f"/?{query}")
+    wait_for_images(scenario_state)
+
+
+@when("the images have finished loading")
+@then("the images have finished loading")
+def images_finished_loading(scenario_state):
+    """Both a 'when' and a 'then' because gallery.feature uses it in both
+    positions: assert the grid is present, wait, then assert about the tiles.
+    """
+    wait_for_images(scenario_state)
+
+
+@then(parsers.parse("the response status is {status:d}"))
+def response_status(status: int, scenario_state):
+    assert scenario_state["response"].status == status
+
+
+@then(parsers.parse("the page shows {count:d} images in a grid"))
+def shows_n_images(count: int, scenario_state):
+    expect(tiles(scenario_state["page"])).to_have_count(count)
+
+
+@then(parsers.parse("the page shows images {first:d} to {last:d}"))
+def shows_image_range(first: int, last: int, scenario_state):
+    """Assert both the count and the identity of the tiles.
+
+    Identity matters: a page showing ten tiles of the wrong images would
+    satisfy a count-only assertion.
+    """
+    located = tiles(scenario_state["page"])
+    expect(located).to_have_count(last - first + 1)
+    ids = located.evaluate_all("els => els.map(e => Number(e.dataset.imageId))")
+    assert ids == list(range(first, last + 1))

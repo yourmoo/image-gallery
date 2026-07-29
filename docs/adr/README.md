@@ -27,6 +27,7 @@ given a speculative ADR.
 | [15](0015-test-strategy.md) | Playwright for behaviour, units for coverage | Coverage measures the service layer; Gherkin binding is the behavioural gate |
 | [16](0016-api-contract.md) | Hand-written contract, test-enforced | Drift fails the build; no OpenAPI, no new dependency |
 | [17](0017-image-fetch-timing.md) | Images fetched per browser request, not during the metadata call | `/api/images` makes no upstream call; no server-side thread pool; the degraded banner is counted client-side |
+| [18](0018-shared-cache-in-shared-memory.md) | Cache in tmpfs, shared by every worker | Replaces the per-process cache of **11**; corrects 11's claim that LocMemCache evicts LRU-style |
 
 ## Format
 

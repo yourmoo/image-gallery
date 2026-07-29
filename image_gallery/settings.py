@@ -88,21 +88,33 @@ DATABASES = {}
 GALLERY_CACHE_TTL = _env_int("GALLERY_CACHE_TTL", 300)
 GALLERY_CACHE_RETENTION = _env_int("GALLERY_CACHE_RETENTION", 3600)
 
-# MAX_ENTRIES is a byte budget in disguise: LocMemCache counts entries, but the
-# entries here are image bytes. The cap is derived from a target per-worker
-# footprint divided by the worst-case entry size, so changing it is a memory
-# decision. Measured medians: small ~7.8 KB, medium ~20.8 KB, large ~59.4 KB,
-# and ~182 KB at GALLERY_MAX_DIMENSION. At 300 entries that is ~7 MB for typical
-# medium browsing, ~20 MB large-heavy, and ~60 MB in the pathological
-# all-at-ceiling case — doubled across two gunicorn workers.
-# See docs/adr/0011-cache-sizing.md.
+# MAX_ENTRIES is a byte budget in disguise: the backend counts entries, but the
+# entries here are image bytes. The cap is derived from a target footprint
+# divided by the worst-case entry size, so changing it is a memory decision.
+# Measured medians: small ~7.8 KB, medium ~20.8 KB, large ~59.4 KB, and ~182 KB
+# at GALLERY_MAX_DIMENSION. At 300 entries that is ~7 MB for typical medium
+# browsing, ~20 MB large-heavy, and ~60 MB in the pathological all-at-ceiling
+# case. Unlike the earlier per-process cache, that footprint is now shared by
+# every worker rather than duplicated.
+# See docs/adr/0011-cache-sizing.md and docs/adr/0018-shared-cache-in-shared-memory.md.
 GALLERY_CACHE_MAX_ENTRIES = _env_int("GALLERY_CACHE_MAX_ENTRIES", 300)
 GALLERY_CACHE_CULL_FREQUENCY = _env_int("GALLERY_CACHE_CULL_FREQUENCY", 3)
 
+# Where the cached image bytes live. In the container this is a tmpfs mount, so
+# the "files" never touch a disk — they are shared memory that every gunicorn
+# worker can read, which is the point: LocMemCache lives in one process's heap
+# and cannot be shared at all.
+#
+# The default is a plain path so a developer running outside Docker still gets a
+# working cache; only its speed differs, not its behaviour.
+GALLERY_CACHE_DIR = os.environ.get(
+    "GALLERY_CACHE_DIR", str(BASE_DIR.parent / ".gallery-cache")
+)
+
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "image-gallery",
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": GALLERY_CACHE_DIR,
         # Retention, not TTL: entries must outlive their freshness window so
         # they remain available as a fallback. Freshness is enforced in code.
         "TIMEOUT": GALLERY_CACHE_RETENTION,

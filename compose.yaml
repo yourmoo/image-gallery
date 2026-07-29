@@ -13,11 +13,23 @@ services:
       GALLERY_CACHE_TTL: "300"
       GALLERY_CACHE_MAX_ENTRIES: "1000"
       GALLERY_CACHE_CULL_FREQUENCY: "3"
+      GALLERY_CACHE_DIR: "/dev/shm/gallery-cache"
       GALLERY_DEFAULT_SIZE: "medium"
       GALLERY_DEFAULT_PAGE_SIZE: "10"
       GALLERY_UPSTREAM_BASE_URL: "https://picsum.dev"
       GALLERY_UPSTREAM_TIMEOUT: "5.0"
       GALLERY_UPSTREAM_RETRIES: "2"
+    # The image cache, in shared memory rather than on disk. Every gunicorn
+    # worker reads and writes the same files, which is what makes a cache hit
+    # independent of which worker serves the request -- LocMemCache lives in one
+    # process's heap and cannot be shared.
+    #
+    # Sized for the 300-entry cap: ~55 MB at the pathological all-at-ceiling
+    # case (~182 KB/entry), so 128 MB leaves headroom. tmpfs is volatile, which
+    # matches "cached while the app is running" exactly -- nothing survives a
+    # restart, and no volume needs managing.
+    tmpfs:
+      - /dev/shm/gallery-cache:size=128m
     healthcheck:
       test:
         - CMD

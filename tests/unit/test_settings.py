@@ -55,8 +55,26 @@ def test_no_database_is_configured():
 def test_cache_is_configured_with_bounds():
     cache = settings.CACHES["default"]
 
-    assert cache["BACKEND"].endswith("LocMemCache")
+    assert cache["BACKEND"].endswith("FileBasedCache")
     assert cache["OPTIONS"]["MAX_ENTRIES"] > 0
+
+
+def test_cache_is_shareable_between_workers():
+    """The cache must not live inside one process's heap.
+
+    Gunicorn runs several workers, and a per-process cache makes a hit depend
+    on which worker happens to serve the request -- so a repeat page view
+    refetches whatever landed on the other worker. A directory-backed cache is
+    shared by every worker reading it.
+
+    See docs/adr/0018-shared-cache-in-shared-memory.md.
+    """
+    cache = settings.CACHES["default"]
+
+    assert not cache["BACKEND"].endswith("LocMemCache"), (
+        "LocMemCache cannot be shared between gunicorn workers"
+    )
+    assert cache["LOCATION"] == settings.GALLERY_CACHE_DIR
 
 
 def test_cache_settings_are_named_and_wired_into_caches():
