@@ -57,6 +57,12 @@ COLD_CACHE_SCENARIOS = {
     # Counts upstream calls, so a cached image would make it fail for the right
     # reason at the wrong time: the calls did happen, on an earlier scenario.
     "test_a_page_is_composed_from_one_upstream_call_per_image",
+    # The partial-failure pair. An injected fault only has an effect on an
+    # image the application must actually fetch — a cached one is served
+    # without consulting the fake at all, so the tile that was supposed to fail
+    # succeeds instead.
+    "test_a_page_still_renders_when_some_images_are_unavailable",
+    "test_a_working_image_is_unaffected_by_a_neighbour_that_fails",
     "test_images_never_seen_before_are_shown_as_unavailable",
     "test_a_slow_gallery_does_not_hold_the_page_open_indefinitely",
     "test_the_grid_appears_before_the_images_do",

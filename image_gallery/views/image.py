@@ -33,16 +33,6 @@ from ..cache import ImageCache
 from ..provider import PicsumProvider, UpstreamError
 from ..validation import validate_size
 
-# A 1x1 transparent GIF, served when no tier could supply real bytes. Real
-# image bytes rather than an error, so the browser's `load` event fires and the
-# tile can style itself as failed rather than hanging in its loading state.
-PLACEHOLDER_GIF = bytes.fromhex(
-    "47494638396101000100800000000000ffffff"
-    "21f90401000000002c00000000010001000002"
-    "0144003b"
-)
-
-
 class ImageProxyView(View):
     """Serve one image, from the best source available."""
 
@@ -100,7 +90,28 @@ class ImageProxyView(View):
         """Nothing cached and upstream unreachable — the accepted cold-start
         case of docs/adr/0012-resilience-strategy.md. No storage layer can fix
         this, so it is a designed outcome rather than a gap.
+
+        **504 with an empty body**, and both halves matter.
+
+        An `<img>` cannot read a response header, and — measured, not assumed —
+        it does not care about the status code either: Chromium fires `load`
+        for a 504 whose body is a valid GIF, because the bytes decoded. The
+        element's only signal to the page is `load` or `error`, so serving
+        renderable bytes here would have every failed tile style itself as
+        successfully loaded while showing a blank square. That is precisely the
+        confusion the design system forbids: a failed tile must never look like
+        one that worked, or like one still loading.
+
+        Sending nothing decodable is therefore the only way to reach the
+        client's `error` handler, which is what marks the tile failed and feeds
+        the degraded count. The tile's own frame keeps the reserved space, so
+        the grid still does not reflow — the placeholder box was doing that job
+        already, and it does it whether or not an image ever arrives.
+
+        Gateway Timeout is the honest status. This application is healthy; the
+        upstream it proxies is not. The *page* is still 200 and the grid is
+        complete — one subresource failed, which is what the banner reports.
         """
-        response = HttpResponse(PLACEHOLDER_GIF, content_type="image/gif")
+        response = HttpResponse(b"", content_type="image/gif", status=504)
         response["X-Image-Source"] = "placeholder"
         return response

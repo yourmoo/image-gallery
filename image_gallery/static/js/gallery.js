@@ -67,14 +67,19 @@ function buildTile(id, template, variations) {
     tile.dataset.state = "loaded";
   });
 
-  /* Only a genuine transport failure reaches here, since the proxy answers 200
-   * with a placeholder when upstream is down. A failed tile must not look like
-   * one that is still loading (docs/ui/design-system.md). */
+  /* The proxy answers 504 when it has nothing to show, so `error` fires for a
+   * tile that genuinely could not be filled. A failed tile must not look like
+   * one that is still loading (docs/ui/design-system.md), so the <img> is
+   * removed and the frame takes the warm failed treatment.
+   *
+   * Counted as it happens rather than tallied at the end: images arrive
+   * independently and there is no moment when "all of them are done". */
   img.addEventListener("error", () => {
     tile.dataset.state = "failed";
     tile.classList.add("tile--failed");
     img.remove();
     frame.dataset.testid = "image-failed";
+    noteDegraded();
   });
 
   frame.appendChild(img);
@@ -138,6 +143,41 @@ function buildPageLink(page, currentParams, label, testid) {
   link.href = pageUrl(page, currentParams);
   link.textContent = label;
   return link;
+}
+
+/* The degraded banner, assembled client-side.
+ *
+ * Which images failed is not known when the document is served — the fetches
+ * happen afterwards, one per tile (docs/adr/0017-image-fetch-timing.md) — so
+ * the count is kept here and the banner appears on the first failure.
+ *
+ * Warm rather than cool: this reports what the *system* did when upstream was
+ * unavailable, where the validation notice reports what *you* asked for and
+ * fell back from. The design system gives them different palettes for exactly
+ * that reason, so they must not share an element.
+ */
+let degradedCount = 0;
+
+function noteDegraded() {
+  degradedCount += 1;
+
+  /* Carries `data-testid="notice"` because that is the hook the suite binds
+   * to for both banners. Safe because they never co-occur: the only scenario
+   * asserting no notice is present is one where nothing failed. The modifier
+   * class is what makes this one warm rather than cool. */
+  let banner = document.querySelector('[data-testid="notice"].notice--warn');
+  if (!banner) {
+    banner = document.createElement("p");
+    banner.className = "notice notice--warn";
+    banner.dataset.testid = "notice";
+    banner.setAttribute("role", "status");
+    grid.parentNode.insertBefore(banner, grid);
+  }
+
+  banner.textContent =
+    degradedCount === 1
+      ? "One image could not be loaded."
+      : `${degradedCount} images could not be loaded.`;
 }
 
 function render() {

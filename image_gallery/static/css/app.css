@@ -86,6 +86,16 @@ main {
   align-items: flex-start;
 }
 
+/* The degraded banner. Warm, where the validation notice is cool: this one
+ * reports what the *system* did when upstream was unavailable, the other what
+ * *you* asked for and fell back from. Two different messages that must not be
+ * mistaken for each other (docs/ui/design-system.md § Colour). */
+.notice--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn-border);
+}
+
 .notice__list {
   margin: 0;
   padding: 0;

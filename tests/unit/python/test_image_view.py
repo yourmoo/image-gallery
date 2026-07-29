@@ -120,18 +120,23 @@ def test_a_different_variation_is_fetched_separately(client):
 # --- resilience ----------------------------------------------------------
 
 
-def test_an_upstream_failure_still_returns_a_usable_response(client):
-    """Degraded, not broken: the request succeeded, the page rendered. A 5xx
-    would claim the application failed when it handled the failure correctly
-    (docs/adr/0012-resilience-strategy.md)."""
+def test_an_upstream_failure_sends_nothing_the_browser_can_decode(client):
+    """The only way to reach the client's `error` handler.
+
+    Measured rather than assumed: Chromium fires `load`, not `error`, for a 504
+    whose body is a valid GIF — the bytes decoded, so the element is satisfied
+    and the status is invisible to it. Serving renderable bytes here would have
+    every failed tile style itself as loaded while showing a blank square.
+
+    The grid still does not reflow: the tile's own frame reserves the space,
+    with or without an image inside it.
+    """
     with patch(
         "image_gallery.views.image.PicsumProvider.fetch", side_effect=UpstreamError("down")
     ):
         response = client.get(url_for(1))
 
-    assert response.status_code == 200
-    assert response["Content-Type"].startswith("image/")
-    assert len(response.content) > 0
+    assert response.content == b""
 
 
 def test_a_failed_fetch_falls_back_to_stale_bytes_when_they_exist(client):
@@ -159,6 +164,43 @@ def test_a_degraded_response_says_so_in_a_header(client):
         response = client.get(url_for(1))
 
     assert response["X-Image-Source"] == "placeholder"
+
+
+def test_a_placeholder_is_a_status_the_browser_can_act_on(client):
+    """`<img>` cannot read a response header, so a header alone leaves the
+    client unable to tell a placeholder from a real image — and the failed-tile
+    state exists precisely so the two never look alike.
+
+    504 rather than 200: the tile's `error` event is the only signal an <img>
+    gives a page, and Gateway Timeout is the honest description — this
+    application is fine, the upstream it proxies is not. The *page* still
+    renders 200 and the grid is complete; it is this one subresource that
+    failed, which is what the degraded banner reports.
+    """
+    with patch(
+        "image_gallery.views.image.PicsumProvider.fetch", side_effect=UpstreamError("down")
+    ):
+        response = client.get(url_for(1))
+
+    assert response.status_code == 504
+    assert response["X-Image-Source"] == "placeholder"
+
+
+def test_a_stale_fallback_is_a_success_not_a_failure(client):
+    """Serving yesterday's bytes is a working tile, not a degraded one: the
+    user sees the image they expected. Only "nothing to show" is a failure."""
+    with patch("image_gallery.views.image.PicsumProvider.fetch", return_value=a_result()):
+        client.get(url_for(1))
+
+    with override_settings(GALLERY_CACHE_TTL=-1):
+        with patch(
+            "image_gallery.views.image.PicsumProvider.fetch",
+            side_effect=UpstreamError("down"),
+        ):
+            response = client.get(url_for(1))
+
+    assert response.status_code == 200
+    assert response["X-Image-Source"] == "stale"
 
 
 def test_a_served_image_reports_which_tier_answered(client):
