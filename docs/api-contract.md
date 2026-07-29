@@ -13,10 +13,15 @@ behaves when they are wrong.
 | Route name | Path | Method | Response |
 | --- | --- | --- | --- |
 | `index` | `/` | GET | `text/html` |
+| `image` | `/images/1` | GET | `image/jpeg` |
 | `healthz` | `/healthz` | GET | `application/json` |
 
 Internal links are built by reversing **route names**, never by writing paths
 (brief line 80), so the middle column can change without touching a template.
+
+A parameterised route is listed with a **worked example** — `/images/1` rather
+than `/images/<id>` — so the table stays literally checkable: the test resolves
+each path and asserts it reaches the named route.
 
 ### `index` — application shell
 
@@ -64,7 +69,6 @@ because they are not yet routed.
 | Route name | Path | Response |
 | --- | --- | --- |
 | `api_image` | `/api/images/<id>` | `application/json` — one image |
-| `image` | `/images/<id>` | `image/jpeg` — the image bytes |
 
 **There is no page-metadata endpoint.** A page of ids is arithmetic over the
 catalogue bound, which the shell already publishes, so the client derives it
@@ -108,8 +112,32 @@ An id outside the catalogue returns `404`.
 
 ### `image` — image bytes
 
-Serves `image/jpeg` proxied from upstream. Accepts `size`, `grayscale`, and
-`blur`. This is the only endpoint that returns bytes rather than JSON.
+Serves image bytes proxied from upstream, and is the only endpoint that returns
+bytes rather than JSON. Every `<img>` in the grid points here, so the browser
+never contacts the provider directly.
+
+| Parameter | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `size` | string | server default | A named size, or `WxH` pixels |
+| `grayscale` | boolean | false | Combines with `blur` |
+| `blur` | integer 0–10 | 0 | Combines with `grayscale` |
+
+**Always `200` when the id is in range**, whatever happened upstream. Four tiers
+answer, in order, and `X-Image-Source` names the one that did:
+
+| `X-Image-Source` | Meaning |
+| --- | --- |
+| `cache` | Served from the freshness window, no upstream call |
+| `upstream` | Fetched now, and cached on the way out |
+| `stale` | Past the freshness window but still retained — upstream was unreachable |
+| `placeholder` | Nothing cached and upstream unreachable |
+
+The header exists because the bytes alone cannot distinguish a placeholder from
+a real image, and the client counts degraded tiles to decide whether to show the
+degraded banner ([ADR 17](adr/0017-image-fetch-timing.md)).
+
+An id outside the catalogue returns `404` — it has no sensible substitute,
+unlike a bad parameter, which falls back.
 
 ## Parameter handling
 

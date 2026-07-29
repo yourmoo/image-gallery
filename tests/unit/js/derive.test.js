@@ -15,6 +15,7 @@ import { describe, it } from "node:test";
 
 import {
   imageIds,
+  imageUrl,
   noticeMessages,
   readBounds,
 } from "../../../image_gallery/static/js/derive.js";
@@ -88,6 +89,42 @@ describe("readBounds", () => {
     assert.equal(readBounds({ page: "abc", count: "10", catalogueSize: "100" }), null);
     assert.equal(readBounds({ page: "1", count: "-5", catalogueSize: "100" }), null);
     assert.equal(readBounds({ page: "1", count: "10", catalogueSize: "" }), null);
+  });
+});
+
+describe("imageUrl", () => {
+  // The template is built by the server from a reversed route, so no path is
+  // written in JavaScript (F5.2, F5.4). The client substitutes an id into it
+  // and appends only the variations it holds in its own controls.
+  const template = "/images/0";
+
+  it("substitutes the id into the server-built template", () => {
+    assert.equal(imageUrl(template, 7, {}), "/images/7");
+  });
+
+  it("points at this application, never at the provider", () => {
+    // ADR 3: the browser must never learn picsum.dev exists.
+    const url = imageUrl(template, 7, { size: "large" });
+
+    assert.ok(url.startsWith("/images/"));
+    assert.ok(!url.includes("picsum"));
+    assert.ok(!url.includes("seed"));
+  });
+
+  it("carries a non-default size", () => {
+    assert.equal(imageUrl(template, 7, { size: "large" }), "/images/7?size=large");
+  });
+
+  it("omits a size that is absent", () => {
+    // A URL carrying only what was asked for keeps the browser cache and the
+    // server cache keyed on the same small set of variations.
+    assert.equal(imageUrl(template, 3, {}), "/images/3");
+  });
+
+  it("gives every image a distinct url so the browser caches them separately", () => {
+    const urls = new Set([1, 2, 3].map((id) => imageUrl(template, id, {})));
+
+    assert.equal(urls.size, 3);
   });
 });
 

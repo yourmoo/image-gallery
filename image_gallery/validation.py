@@ -158,6 +158,45 @@ def validate_page(raw: str | None, last_page: int) -> tuple[int, Rejection | Non
     )
 
 
+NAMED_SIZES = ("small", "medium", "large")
+
+
+def validate_size(
+    raw: str | None, *, default: str, minimum: int, maximum: int
+) -> tuple[str, Rejection | None]:
+    """Resolve `size`: one of the three names, or `WxH` within the bounds.
+
+    This module owns the *grammar* and never resolves a name to pixels — that
+    is provider vocabulary (docs/adr/0013-module-structure.md). It returns the
+    size as the client expressed it, normalised to lower case.
+
+    **Out-of-range dimensions are rejected, never clamped.** Silently serving
+    1600px when 6000 was requested would be undetectable to the caller
+    (docs/adr/0010-configurable-and-custom-sizes.md), and picsum does not
+    enforce its own documented limit, so this ceiling is the only thing
+    bounding upstream traffic.
+    """
+    accepted = f"{', '.join(NAMED_SIZES)}, or WxH between {minimum} and {maximum}"
+
+    if raw is None or not str(raw).strip():
+        return default, None
+
+    text = str(raw).strip().lower()
+    if text in NAMED_SIZES:
+        return text, None
+
+    width_text, separator, height_text = text.partition("x")
+    width, height = _as_int(width_text), _as_int(height_text)
+
+    if separator and width is not None and height is not None:
+        if minimum <= width <= maximum and minimum <= height <= maximum:
+            return text, None
+
+    return default, Rejection(
+        parameter="size", value=str(raw), applied=default, accepted=accepted
+    )
+
+
 def validate(
     params,
     *,

@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
-from django.urls import get_resolver, reverse
+from django.urls import get_resolver, resolve, reverse
 
 import image_gallery
 
@@ -95,8 +95,23 @@ def test_every_route_is_documented():
 
 @pytest.mark.parametrize("name,documented_path", sorted(_documented_routes().items()))
 def test_documented_path_matches_the_urlconf(name, documented_path):
-    """The path a reader would use is the path the application serves."""
-    assert reverse(name) == documented_path
+    """The path a reader would use is the path the application serves.
+
+    A parameterised route is documented by a **worked example** — `/images/1`
+    rather than `/images/<id>` — so the table stays literally checkable against
+    `resolve()`. Documenting the pattern instead would mean comparing prose to
+    a regex, which is how a contract starts drifting again.
+    """
+    match = resolve(documented_path)
+
+    assert match.url_name == name, (
+        f"{documented_path} resolves to {match.url_name!r}, not {name!r}"
+    )
+
+    # For a route with no arguments the reverse must round-trip exactly; with
+    # arguments, resolving the example is the strongest check available.
+    if not match.kwargs and not match.args:
+        assert reverse(name) == documented_path
 
 
 def test_documented_responses_match_what_is_served(client):

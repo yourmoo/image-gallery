@@ -61,6 +61,15 @@ def test_the_grid_carries_the_size_the_design_system_uses_for_its_cell_floor(cli
     assert "huge" not in body
 
 
+def test_the_shell_publishes_a_reversed_image_url_template(client):
+    """F5.2 and F5.4: the client substitutes an id into a server-built URL
+    rather than assembling a path of its own. Reversing it here means the route
+    can move in urls.py without touching any JavaScript."""
+    body = client.get(reverse("index")).content.decode()
+
+    assert f'data-image-url-template="{reverse("image", args=[0])}"' in body
+
+
 def test_the_shell_carries_no_image_data(client):
     """Client-side rendering: tiles are built in the browser, not the template."""
     assert "image-tile" not in client.get(reverse("index")).content.decode()

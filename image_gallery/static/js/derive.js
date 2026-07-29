@@ -52,6 +52,30 @@ export function readBounds(dataset) {
   return { page, count, catalogueSize };
 }
 
+/* The URL for one tile's image.
+ *
+ * `template` is built by the server by reversing the `image` route, so no path
+ * is written here — the client only substitutes an id and appends the
+ * variations its own controls hold (F5.2, F5.4). It points at this
+ * application; the browser never contacts the provider
+ * (docs/adr/0003-django-as-image-proxy.md).
+ *
+ * Parameters left at their defaults are omitted, so the browser cache and the
+ * server cache stay keyed on the same small set of variations rather than on
+ * URLs that differ only in redundant text.
+ */
+export function imageUrl(template, id, variations) {
+  const path = template.replace(/0(?=[^0]*$)/, String(id));
+
+  const query = new URLSearchParams();
+  if (variations.size) query.set("size", variations.size);
+  if (variations.grayscale) query.set("grayscale", "1");
+  if (variations.blur) query.set("blur", String(variations.blur));
+
+  const suffix = query.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
 /* The wording behind each `?notice=` token.
  *
  * The URL carries a token so the address stays short and the phrasing stays a

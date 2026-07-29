@@ -54,6 +54,9 @@ CATALOGUE_SIZE = 100
 # scenario run warm — tests/unit/python/test_bdd_harness.py fails the build if that
 # happens.
 COLD_CACHE_SCENARIOS = {
+    # Counts upstream calls, so a cached image would make it fail for the right
+    # reason at the wrong time: the calls did happen, on an earlier scenario.
+    "test_a_page_is_composed_from_one_upstream_call_per_image",
     "test_images_never_seen_before_are_shown_as_unavailable",
     "test_a_slow_gallery_does_not_hold_the_page_open_indefinitely",
     "test_the_grid_appears_before_the_images_do",

@@ -17,14 +17,20 @@
  * (docs/adr/0009-url-vocabularies.md).
  */
 
-import { imageIds, noticeMessages, readBounds } from "./derive.js";
+import { imageIds, imageUrl, noticeMessages, readBounds } from "./derive.js";
 
 const grid = document.getElementById("gallery");
 
 /* Markup follows docs/ui/design-system.md § Image grid. The frame holds its
  * aspect ratio from the moment it is created, so the grid reserves its full
- * layout before any image loads and never reflows as they arrive. */
-function buildTile(id) {
+ * layout before any image loads and never reflows as they arrive.
+ *
+ * Each <img> is a separate request to this application's image endpoint, which
+ * is what makes the page composed of one upstream call per tile (F2.7) and
+ * what the per-tile placeholder exists for: at 50 images the page is roughly
+ * 1 MB, arriving progressively.
+ */
+function buildTile(id, template, variations) {
   const tile = document.createElement("li");
   tile.className = "tile";
   tile.dataset.testid = "image-tile";
@@ -33,6 +39,37 @@ function buildTile(id) {
 
   const frame = document.createElement("span");
   frame.className = "tile__frame";
+
+  const img = document.createElement("img");
+  img.className = "tile__image";
+  img.dataset.testid = "image-figure";
+  img.dataset.loaded = "false";
+  img.alt = `Image ${id}`;
+  /* Below the fold this defers the request entirely, which matters at 50 per
+   * page. The tile keeps its reserved space either way. */
+  img.loading = "lazy";
+  img.src = imageUrl(template, id, variations);
+
+  /* `load` fires for the placeholder GIF too — a degraded tile is still a
+   * decoded image — so "loaded" here means "the browser has something to
+   * paint", and the degraded banner is driven by the server's own count
+   * rather than by this event. */
+  img.addEventListener("load", () => {
+    img.dataset.loaded = "true";
+    tile.dataset.state = "loaded";
+  });
+
+  /* Only a genuine transport failure reaches here, since the proxy answers 200
+   * with a placeholder when upstream is down. A failed tile must not look like
+   * one that is still loading (docs/ui/design-system.md). */
+  img.addEventListener("error", () => {
+    tile.dataset.state = "failed";
+    tile.classList.add("tile--failed");
+    img.remove();
+    frame.dataset.testid = "image-failed";
+  });
+
+  frame.appendChild(img);
   tile.appendChild(frame);
 
   return tile;
@@ -64,9 +101,15 @@ function render() {
     return;
   }
 
+  const template = grid.dataset.imageUrlTemplate;
+  if (!template) {
+    showNotice("The gallery could not be loaded.");
+    return;
+  }
+
   const fragment = document.createDocumentFragment();
   for (const id of imageIds(bounds.page, bounds.count, bounds.catalogueSize)) {
-    fragment.appendChild(buildTile(id));
+    fragment.appendChild(buildTile(id, template, {}));
   }
 
   grid.replaceChildren(fragment);

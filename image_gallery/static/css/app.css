@@ -253,6 +253,27 @@ main {
   opacity: 1;
 }
 
+/* Failed tile (docs/ui/design-system.md § Failure states).
+ *
+ * Deliberately unlike the striped placeholder: dashed warm border on a warm
+ * ground, where a pending tile is a neutral stripe. A failed tile that looked
+ * like a loading tile would leave a user waiting for something that is never
+ * going to arrive. Keeps the aspect ratio, so one bad upstream call never
+ * reflows the grid. */
+.tile--failed .tile__frame {
+  background: var(--warn-bg);
+  border: var(--border-width) dashed var(--warn-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--warn);
+  font-size: var(--text-xs);
+}
+
+.tile--failed .tile__frame::after {
+  content: "Couldn't load";
+}
+
 @supports not (aspect-ratio: 1) {
   .tile__frame {
     height: var(--cell-medium);

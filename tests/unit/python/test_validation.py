@@ -15,9 +15,69 @@ from image_gallery.validation import (
     validate,
     validate_count,
     validate_page,
+    validate_size,
 )
 
 PAGE_SIZES = (10, 20, 50)
+SIZE_BOUNDS = {"minimum": 16, "maximum": 1600}
+
+
+# --- size ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["small", "medium", "large"])
+def test_the_three_named_sizes_are_accepted(name):
+    """F3.1. The names are client vocabulary; pixels are resolved later."""
+    size, rejection = validate_size(name, default="medium", **SIZE_BOUNDS)
+
+    assert size == name
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", [None, "", "  "])
+def test_an_absent_size_takes_the_default(raw):
+    size, rejection = validate_size(raw, default="medium", **SIZE_BOUNDS)
+
+    assert size == "medium"
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["640x480", "1600x1600", "16x16", "200X300"])
+def test_custom_pixel_dimensions_are_a_first_class_size(raw):
+    """ADR 10 — `WxH` is not a special case, and the X may be either case."""
+    size, rejection = validate_size(raw, default="medium", **SIZE_BOUNDS)
+
+    assert size == raw.lower()
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["6000x6000", "1601x100", "8x8", "0x0"])
+def test_dimensions_outside_the_bounds_are_rejected_not_clamped(raw):
+    """Silently serving 1600 when 6000 was asked for would be undetectable to
+    the caller (docs/adr/0010-configurable-and-custom-sizes.md). picsum does
+    not enforce its own documented limit, so this ceiling is the only thing
+    bounding upstream traffic.
+    """
+    size, rejection = validate_size(raw, default="medium", **SIZE_BOUNDS)
+
+    assert size == "medium"
+    assert rejection is not None
+    assert rejection.parameter == "size"
+
+
+@pytest.mark.parametrize("raw", ["huge", "enormous", "400", "x", "400x", "axb", "-4x-4"])
+def test_a_size_that_is_neither_a_name_nor_a_dimension_pair_is_rejected(raw):
+    size, rejection = validate_size(raw, default="medium", **SIZE_BOUNDS)
+
+    assert size == "medium"
+    assert rejection is not None
+
+
+def test_a_rejected_size_names_what_is_accepted():
+    _, rejection = validate_size("huge", default="medium", **SIZE_BOUNDS)
+
+    assert "small" in rejection.accepted
+    assert "1600" in rejection.accepted, "the bound should be discoverable"
 
 
 # --- count ---------------------------------------------------------------
