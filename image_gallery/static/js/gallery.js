@@ -192,15 +192,24 @@ function render() {
     return;
   }
 
+  /* Read from the URL rather than from the controls: the URL is the state
+   * (F2.1), and it has already been through the server's validator, so a value
+   * here cannot be one the image endpoint would reject. */
+  const params = new URLSearchParams(window.location.search);
+  const variations = {
+    size: params.get("size"),
+    grayscale: params.get("grayscale"),
+    blur: params.get("blur"),
+  };
+
   const fragment = document.createDocumentFragment();
   for (const id of imageIds(bounds.page, bounds.count, bounds.catalogueSize)) {
-    fragment.appendChild(buildTile(id, template, {}));
+    fragment.appendChild(buildTile(id, template, variations));
   }
 
   grid.replaceChildren(fragment);
   grid.dataset.state = "ready";
 
-  const params = new URLSearchParams(window.location.search);
   const pages = totalPages(bounds.catalogueSize, bounds.count);
   grid.parentNode.insertBefore(buildPagination(bounds.page, pages, params), grid.nextSibling);
 }
@@ -208,25 +217,63 @@ function render() {
 /* Controls apply instantly — no Apply button, which is the ordinary CSR
  * expectation and removes a click from every change (docs/ui/ui-notes.md).
  *
- * Changing the count returns to page 1 deliberately: at 50 per page there is
- * no page 7, so keeping the number would land the user on a page that no
- * longer exists and trigger a correction they did not ask for.
- *
  * A full navigation rather than a re-render in place. The server validates the
  * new value, the address bar stays truthful, and the result is bookmarkable —
  * all of which a client-side re-render would have to reimplement.
+ *
+ * A control returned to its default drops the parameter rather than spelling
+ * it out, so the URL carries the user's intent and nothing more.
  */
-function wireControls() {
-  const count = document.querySelector('[data-testid="count-control"]');
-  if (!count) return;
+function applyControl(name, value, isDefault) {
+  const params = new URLSearchParams(window.location.search);
 
-  count.addEventListener("change", () => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("count", count.value);
-    params.delete("page");
-    params.delete("notice");
-    window.location.search = params.toString();
-  });
+  if (isDefault) params.delete(name);
+  else params.set(name, value);
+
+  /* Any control change returns to page 1. At 50 per page there is no page 7,
+   * and a filter change makes "where you were" meaningless anyway. */
+  params.delete("page");
+  params.delete("notice");
+  window.location.search = params.toString();
+}
+
+function wireControls() {
+  const size = document.querySelector('[data-testid="size-control"]');
+  const grayscale = document.querySelector('[data-testid="grayscale-control"]');
+  const blur = document.querySelector('[data-testid="blur-control"]');
+  const blurValue = document.querySelector('[data-testid="blur-value"]');
+  const count = document.querySelector('[data-testid="count-control"]');
+
+  if (size) {
+    size.addEventListener("change", () =>
+      applyControl("size", size.value, size.value === "medium")
+    );
+  }
+
+  if (grayscale) {
+    grayscale.addEventListener("change", () =>
+      applyControl("grayscale", "1", !grayscale.checked)
+    );
+  }
+
+  if (blur) {
+    /* Two events, deliberately. `input` fires continuously while dragging and
+     * only updates the readout, which costs nothing. `change` fires when the
+     * drag ends and is what navigates — so dragging the slider is one request,
+     * not eleven, and no debounce timer is needed to achieve it. */
+    blur.addEventListener("input", () => {
+      if (blurValue) blurValue.textContent = blur.value;
+    });
+    blur.addEventListener("change", () =>
+      applyControl("blur", blur.value, Number(blur.value) === 0)
+    );
+  }
+
+  if (count) {
+    count.addEventListener("change", () =>
+      applyControl("count", count.value, false)
+    );
+  }
 }
 
 if (grid) {

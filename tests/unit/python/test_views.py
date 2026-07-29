@@ -49,16 +49,20 @@ def test_the_published_bounds_follow_the_validated_request(client):
 
 
 def test_the_grid_carries_the_size_the_design_system_uses_for_its_cell_floor(client):
-    """`data-size` selects the cell width (docs/ui/design-system.md § Image grid).
+    """`data-size` selects the cell width (docs/ui/design-system.md § Image grid)."""
+    assert 'data-size="medium"' in client.get(reverse("index")).content.decode()
+    assert 'data-size="large"' in client.get(
+        reverse("index"), {"size": "large"}
+    ).content.decode()
 
-    Always the configured default at stage 1 — `size` is not validated until
-    the variation stages, and echoing an unvalidated query value into markup
-    would let `?size=huge` select a cell width.
-    """
-    body = client.get(reverse("index"), {"size": "huge"}).content.decode()
 
-    assert 'data-size="medium"' in body
-    assert "huge" not in body
+def test_an_invalid_size_never_reaches_the_markup(client):
+    """`data-size` feeds a CSS selector, so an unvalidated value must not get
+    there. It cannot: a bad size is corrected before anything renders."""
+    response = client.get(reverse("index"), {"size": "huge"})
+
+    assert response.status_code == 302
+    assert "huge" not in response["Location"]
 
 
 def test_the_shell_publishes_a_reversed_image_url_template(client):
@@ -160,11 +164,16 @@ def test_a_valid_request_renders_the_shell(client):
 
 @pytest.mark.parametrize("bad", ["abc", "0", "-5", "999", "1.5"])
 def test_a_bad_page_in_the_address_bar_redirects_to_page_one(client, bad):
-    """Brief line 48, and the reason the client can be trusted downstream."""
+    """Brief line 48, and the reason the client can be trusted downstream.
+
+    Page 1 is the default, so the corrected URL says nothing about `page` at
+    all — the absence *is* page 1. The notice is what proves the correction
+    happened.
+    """
     response = client.get(reverse("index"), {"page": bad})
 
     assert response.status_code == 302
-    assert query_of(response)["page"] == ["1"]
+    assert "page" not in query_of(response)
     assert query_of(response)["notice"] == ["invalid_page"]
 
 
@@ -173,20 +182,24 @@ def test_a_bad_count_is_corrected_to_the_default(client, bad):
     response = client.get(reverse("index"), {"count": bad})
 
     assert response.status_code == 302
-    assert query_of(response)["count"] == ["10"]
+    assert "count" not in query_of(response), "the default is written as an absence"
+    assert query_of(response)["notice"] == ["invalid_count"]
+
+
+def test_a_corrected_url_keeps_a_non_default_value_explicit(client):
+    """Only defaults are dropped. A page the user really asked for stays."""
+    response = client.get(reverse("index"), {"page": "3", "count": "7"})
+
+    assert query_of(response)["page"] == ["3"]
     assert query_of(response)["notice"] == ["invalid_count"]
 
 
 def test_the_redirect_preserves_parameters_it_did_not_reject(client):
-    """One bad parameter must not discard the good ones.
-
-    `size` is not validated until stage 7; carrying it through unexamined is
-    what stops the stage-1 redirect from silently dropping it.
-    """
+    """One bad parameter must not discard the good ones."""
     response = client.get(reverse("index"), {"page": "abc", "size": "large"})
 
     assert query_of(response)["size"] == ["large"]
-    assert query_of(response)["page"] == ["1"]
+    assert query_of(response)["notice"] == ["invalid_page"]
 
 
 def test_several_invalid_parameters_produce_several_notices(client):

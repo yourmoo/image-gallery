@@ -18,7 +18,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
-from ..validation import validate
+from ..validation import NAMED_SIZES, validate
 
 
 class AppShellView(View):
@@ -32,6 +32,10 @@ class AppShellView(View):
             page_sizes=settings.GALLERY_PAGE_SIZES,
             default_count=settings.GALLERY_DEFAULT_PAGE_SIZE,
             catalogue_size=settings.GALLERY_CATALOGUE_SIZE,
+            default_size=settings.GALLERY_DEFAULT_SIZE,
+            minimum_dimension=settings.GALLERY_MIN_DIMENSION,
+            maximum_dimension=settings.GALLERY_MAX_DIMENSION,
+            maximum_blur=settings.GALLERY_MAX_BLUR,
         )
 
         if not result.is_valid:
@@ -52,22 +56,31 @@ class AppShellView(View):
             # rendering it server-side from the same setting the validator uses
             # means the widget cannot offer a value the server would reject.
             "page_sizes": settings.GALLERY_PAGE_SIZES,
-            # Drives `data-size` on the grid, which selects the cell floor
-            # (docs/ui/design-system.md). Always the configured default at this
-            # stage: `size` is not validated until the variation stages, and
-            # echoing an unvalidated query value into markup would let
-            # `?size=huge` select a cell width.
-            "size": settings.GALLERY_DEFAULT_SIZE,
+            # The active variations, already validated. `size` also drives
+            # `data-size` on the grid, which selects the cell floor
+            # (docs/ui/design-system.md) — safe to echo into markup precisely
+            # because it has been through the validator, so `?size=huge` can
+            # never reach a CSS selector.
+            "size": result.size,
+            "named_sizes": NAMED_SIZES,
+            "grayscale": result.grayscale,
+            "blur": result.blur,
+            "max_blur": settings.GALLERY_MAX_BLUR,
         }
 
     def _corrected_url(self, request, result) -> str:
         """The same URL with invalid values replaced and notices appended.
 
-        Parameters this stage does not yet validate are carried through
-        untouched rather than dropped: a redirect that discarded `?size=` would
-        lose a valid parameter while correcting an unrelated one, which is the
-        opposite of "one bad parameter does not discard the good ones"
-        (docs/adr/0006-recover-and-explain.md).
+        **Every validated parameter is written back**, not only the rejected
+        ones. The corrected URL has to survive a second pass — the browser
+        follows it, this view validates it again, and anything still invalid
+        would redirect once more. Writing back the resolved values guarantees
+        that second pass is clean, which is the loop this design has to rule
+        out.
+
+        A parameter left at its default is dropped rather than spelled out, so
+        a corrected URL stays as short as the user's intent: `?size=huge`
+        becomes `?notice=invalid_size`, not a full listing of every default.
 
         Built with `reverse` rather than a literal path, per F5.4, and encoded
         with `QueryDict.urlencode` rather than `urllib`'s: several parameters
@@ -76,8 +89,24 @@ class AppShellView(View):
         with `doseq=True`.
         """
         params = request.GET.copy()
-        params["page"] = str(result.page)
-        params["count"] = str(result.count)
+
+        resolved = {
+            "page": (result.page, 1),
+            "count": (result.count, settings.GALLERY_DEFAULT_PAGE_SIZE),
+            "size": (result.size, settings.GALLERY_DEFAULT_SIZE),
+            "blur": (result.blur, 0),
+        }
+        for name, (value, default) in resolved.items():
+            if value == default:
+                params.pop(name, None)
+            else:
+                params[name] = str(value)
+
+        if result.grayscale:
+            params["grayscale"] = "1"
+        else:
+            params.pop("grayscale", None)
+
         params.setlist("notice", [rejection.notice for rejection in result.rejections])
 
         return f"{reverse('index')}?{params.urlencode()}"

@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 from pytest_bdd import given, parsers, then, when
 
@@ -66,6 +67,20 @@ COLD_CACHE_SCENARIOS = {
     "test_images_never_seen_before_are_shown_as_unavailable",
     "test_a_slow_gallery_does_not_hold_the_page_open_indefinitely",
     "test_the_grid_appears_before_the_images_do",
+    # The variation scenarios assert on the dimensions and filters the
+    # application *requested upstream*, which is the only honest evidence a
+    # transformation was applied — the fake returns the same pixel either way.
+    # A cached tile is served without consulting the fake at all, so a warm
+    # cache leaves nothing to assert on. Most acute for the default cases
+    # (`medium`, `blur=0`), where the page under test is the one already
+    # cached by the scenario's own first navigation.
+    "test_images_are_shown_at_the_default_size_when_i_ask_for_nothing",
+    "test_choosing_a_named_size",
+    "test_asking_for_a_custom_size",
+    "test_viewing_the_collection_in_grayscale",
+    "test_blurring_the_images",
+    "test_combining_grayscale_and_blur",
+    "test_size_and_filters_apply_together",
 }
 
 
@@ -198,6 +213,27 @@ def _wait_for(url: str, timeout: float = 90.0, what: str = "service") -> None:
     raise RuntimeError(f"{what} at {url} never became healthy: {last}")
 
 
+def empty_image_cache() -> None:
+    """Delete every cached image from the running `web` service.
+
+    The cache is a directory in shared memory, so emptying it is a file
+    deletion rather than a container restart — faster, and it disturbs nothing
+    else about the service. Done from outside the application: a test-only
+    flush endpoint would put scaffolding into production code, which the
+    project's guardrails rule out.
+
+    Exposed as a function as well as a fixture because a step sometimes needs
+    to empty it *mid-scenario* — after navigating to the gallery but before
+    driving a control — so that what the control does is the only thing the
+    upstream log describes.
+    """
+    _compose(
+        "exec", "-T", "web",
+        "sh", "-c", "rm -rf /dev/shm/gallery-cache/* 2>/dev/null || true",
+        check=False,
+    )
+
+
 def _stack_is_up() -> bool:
     try:
         with urllib.request.urlopen(f"{WEB_BASE_URL}/healthz", timeout=2) as response:
@@ -272,11 +308,7 @@ def cold_cache(e2e_stack) -> GalleryServer:
     put scaffolding into production code, which the project's guardrails rule
     out.
     """
-    _compose(
-        "exec", "-T", "web",
-        "sh", "-c", "rm -rf /dev/shm/gallery-cache/* 2>/dev/null || true",
-        check=False,
-    )
+    empty_image_cache()
     return GalleryServer(WEB_BASE_URL)
 
 
@@ -338,8 +370,30 @@ def tiles(page):
 
 
 def wait_for_images(state: dict) -> None:
-    """Wait until the page has settled after a navigation or control change."""
-    state["page"].wait_for_load_state("networkidle")
+    """Wait until the page has settled after a navigation or control change.
+
+    `networkidle` alone is not enough after a control change. Changing a
+    control fires a JavaScript navigation, and the browser has not started it
+    by the time the event handler returns — so the page is still idle from the
+    *previous* load, `networkidle` is satisfied immediately, and the step goes
+    on to assert against a page that never changed.
+
+    That produced a genuinely confusing failure: the control worked, the URL
+    was correct when inspected by hand, and the scenario still saw no upstream
+    requests. Waiting for the URL to change first closes the race; the timeout
+    is short and non-fatal because most steps navigate directly, where there is
+    no pending change to wait for.
+    """
+    page = state["page"]
+    before = page.url
+    try:
+        page.wait_for_function(
+            "url => window.location.href !== url", arg=before, timeout=1500
+        )
+    except PlaywrightTimeoutError:
+        pass  # nothing navigated — an ordinary step, not a control change
+
+    page.wait_for_load_state("networkidle")
 
 
 # --------------------------------------------------------------------------

@@ -196,6 +196,13 @@ GALLERY_SIZE_LARGE = os.environ.get("GALLERY_SIZE_LARGE", "800x800")
 # See docs/adr/0010-configurable-and-custom-sizes.md.
 GALLERY_MAX_DIMENSION = _env_int("GALLERY_MAX_DIMENSION", 1600)
 GALLERY_MIN_DIMENSION = _env_int("GALLERY_MIN_DIMENSION", 16)
+
+# Blur's ceiling, unlike the dimension bounds, is **fixed by the published
+# contract** rather than being deployment configuration: docs/api-contract.md
+# states the 0-10 range as part of the interface, and picsum accepts exactly
+# that. It is a named setting only so the validator, the control's `max`, and
+# the contract cannot drift apart.
+GALLERY_MAX_BLUR = _env_int("GALLERY_MAX_BLUR", 10)
 # There is no GALLERY_FETCH_CONCURRENCY. Django does not fan out: each image is
 # fetched by its own /images/<id> request, so parallelism is the browser's
 # connection pool rather than a thread pool of ours.

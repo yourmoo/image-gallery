@@ -25,7 +25,7 @@ import pytest
 from playwright.sync_api import expect
 from pytest_bdd import parsers, scenarios, then, when
 
-from conftest import goto, query_string, tiles, wait_for_images
+from conftest import empty_image_cache, goto, query_string, tiles, wait_for_images
 
 pytestmark = pytest.mark.e2e
 
@@ -37,6 +37,30 @@ scenarios("variations.feature")
 # --------------------------------------------------------------------------
 
 
+def _open_gallery_for_controls(scenario_state) -> None:
+    """Land on the gallery, then forget everything that loading it did.
+
+    Driving a control needs the page open first, and opening it fetches a
+    page's worth of images at the *current* settings. Those requests are not
+    evidence about the setting under test — without clearing them,
+    `I choose the "large" size` is asserted against ten medium requests from
+    the navigation plus ten large ones from the change.
+
+    Both the log **and the image cache** are emptied, because clearing only the
+    log is not enough. A tile the first navigation cached is served without the
+    fake being consulted at all, so choosing a value that was already cached —
+    or choosing the default, which does not navigate — would leave the log
+    empty and the assertion with nothing to read.
+    """
+    page = scenario_state["page"]
+    if not page.url.startswith(scenario_state["base_url"]):
+        goto(scenario_state, "/")
+        wait_for_images(scenario_state)
+
+    empty_image_cache()
+    scenario_state["upstream"].reset()
+
+
 @when(parsers.parse('I choose the "{size}" size'))
 def choose_size(size: str, scenario_state):
     """Drive the real control.
@@ -44,29 +68,24 @@ def choose_size(size: str, scenario_state):
     F3.1 offers named sizes through the UI, so setting ?size= here would let a
     missing or broken control still pass.
     """
-    page = scenario_state["page"]
-    if not page.url.startswith(scenario_state["base_url"]):
-        goto(scenario_state, "/")
-    page.get_by_test_id("size-control").select_option(size)
+    _open_gallery_for_controls(scenario_state)
+    scenario_state["page"].get_by_test_id("size-control").select_option(size)
     wait_for_images(scenario_state)
 
 
 @when("I turn grayscale on")
 def turn_grayscale_on(scenario_state):
-    page = scenario_state["page"]
-    if not page.url.startswith(scenario_state["base_url"]):
-        goto(scenario_state, "/")
-    page.get_by_test_id("grayscale-control").check()
+    _open_gallery_for_controls(scenario_state)
+    scenario_state["page"].get_by_test_id("grayscale-control").check()
     wait_for_images(scenario_state)
 
 
 @when(parsers.parse("I set the blur to {blur:d}"))
 def set_blur(blur: int, scenario_state):
-    page = scenario_state["page"]
-    if not page.url.startswith(scenario_state["base_url"]):
-        goto(scenario_state, "/")
-    page.get_by_test_id("blur-control").fill(str(blur))
-    page.get_by_test_id("blur-control").dispatch_event("change")
+    _open_gallery_for_controls(scenario_state)
+    blur_control = scenario_state["page"].get_by_test_id("blur-control")
+    blur_control.fill(str(blur))
+    blur_control.dispatch_event("change")
     wait_for_images(scenario_state)
 
 

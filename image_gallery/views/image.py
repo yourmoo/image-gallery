@@ -31,7 +31,8 @@ from django.views import View
 
 from ..cache import ImageCache
 from ..provider import PicsumProvider, UpstreamError
-from ..validation import validate_size
+from ..validation import validate_blur, validate_grayscale, validate_size
+
 
 class ImageProxyView(View):
     """Serve one image, from the best source available."""
@@ -45,29 +46,50 @@ class ImageProxyView(View):
             # which falls back (docs/adr/0006-recover-and-explain.md).
             raise Http404(f"no image {image_id}")
 
-        size, rejection = validate_size(
+        size, size_rejection = validate_size(
             request.GET.get("size"),
             default=settings.GALLERY_DEFAULT_SIZE,
             minimum=settings.GALLERY_MIN_DIMENSION,
             maximum=settings.GALLERY_MAX_DIMENSION,
         )
-        if rejection is not None:
-            return JsonResponse({"errors": [rejection.as_dict()]}, status=400)
+        grayscale, grayscale_rejection = validate_grayscale(request.GET.get("grayscale"))
+        blur, blur_rejection = validate_blur(
+            request.GET.get("blur"), maximum=settings.GALLERY_MAX_BLUR
+        )
 
-        return self._serve(image_id, size)
+        rejections = [
+            rejection
+            for rejection in (size_rejection, grayscale_rejection, blur_rejection)
+            if rejection is not None
+        ]
+        if rejections:
+            return JsonResponse(
+                {"errors": [rejection.as_dict() for rejection in rejections]}, status=400
+            )
 
-    def _serve(self, image_id: int, size: str) -> HttpResponse:
+        return self._serve(image_id, size, grayscale, blur)
+
+    def _serve(
+        self, image_id: int, size: str, grayscale: bool, blur: int
+    ) -> HttpResponse:
         provider = PicsumProvider()
         cache = ImageCache()
         width, height = provider.resolve_size(size)
-        variation = {"width": width, "height": height, "grayscale": False, "blur": 0}
+        variation = {
+            "width": width,
+            "height": height,
+            "grayscale": grayscale,
+            "blur": blur,
+        }
 
         fresh = cache.get_fresh(image_id=image_id, **variation)
         if fresh is not None:
             return self._respond(fresh)
 
         try:
-            result = provider.fetch(image_id=image_id, size=size)
+            result = provider.fetch(
+                image_id=image_id, size=size, grayscale=grayscale, blur=blur
+            )
         except UpstreamError:
             stale = cache.get_stale(image_id=image_id, **variation)
             if stale is not None:

@@ -37,11 +37,41 @@ so restyling cannot break a test.
   changing a control fires a navigation directly (docs/ui/ui-notes.md).
   {% endcomment %}
   <div class="controls" data-testid="controls">
-    <div class="control">
+    <div class="control" data-active="{% if size != 'medium' %}true{% else %}false{% endif %}">
+      <label class="control__label" for="size">Size</label>
+      <select class="control__field" id="size" name="size" data-testid="size-control">
+        {% for name in named_sizes %}
+          <option value="{{ name }}"{% if name == size %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="control control--check" data-active="{{ grayscale|yesno:'true,false' }}">
+      <input class="control__check" type="checkbox" id="grayscale" name="grayscale"
+             data-testid="grayscale-control"{% if grayscale %} checked{% endif %}>
+      <label class="control__label" for="grayscale">Grayscale</label>
+    </div>
+
+    <div class="control" data-active="{% if blur %}true{% else %}false{% endif %}">
+      <label class="control__label" for="blur">
+        Blur <output class="control__value" for="blur" data-testid="blur-value">{{ blur }}</output>
+      </label>
+      {% comment %}
+      A range rather than a number field: dragging is the gesture the debounce
+      fits, and min/max make out-of-range values unreachable by mouse. They are
+      usability affordances only — the server still validates, since a
+      hand-edited URL bypasses the widget entirely.
+      {% endcomment %}
+      <input class="control__range" type="range" id="blur" name="blur"
+             data-testid="blur-control"
+             min="0" max="{{ max_blur }}" step="1" value="{{ blur }}">
+    </div>
+
+    <div class="control" data-active="{% if count != 10 %}true{% else %}false{% endif %}">
       <label class="control__label" for="count">Per page</label>
       <select class="control__field" id="count" name="count" data-testid="count-control">
-        {% for size in page_sizes %}
-          <option value="{{ size }}"{% if size == count %} selected{% endif %}>{{ size }}</option>
+        {% for page_size in page_sizes %}
+          <option value="{{ page_size }}"{% if page_size == count %} selected{% endif %}>{{ page_size }}</option>
         {% endfor %}
       </select>
     </div>

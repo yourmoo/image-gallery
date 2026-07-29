@@ -70,11 +70,19 @@ class Validated:
 
     page: int
     count: int
+    size: str = "medium"
+    grayscale: bool = False
+    blur: int = 0
     rejections: list[Rejection] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
         return not self.rejections
+
+    def variations(self) -> dict:
+        """The parameters that change how an image looks, without `page` and
+        `count`, which change only which images are shown."""
+        return {"size": self.size, "grayscale": self.grayscale, "blur": self.blur}
 
 
 def _as_int(raw: str | None) -> int | None:
@@ -207,19 +215,84 @@ def validate_size(
     )
 
 
+TRUTHY = {"1", "true", "on", "yes"}
+FALSY = {"0", "false", "off", "no", ""}
+
+
+def validate_grayscale(raw: str | None) -> tuple[bool, Rejection | None]:
+    """Resolve `grayscale` to a boolean.
+
+    Several spellings are honoured because several producers exist: an unticked
+    checkbox sends nothing, a ticked one sends `on`, and a hand-written URL is
+    likelier to say `1` or `true`. They are one intent, so they get one answer.
+
+    An absent parameter is off — the F3.3 default — and not a rejection.
+    """
+    if raw is None:
+        return False, None
+
+    text = str(raw).strip().lower()
+    if text in TRUTHY:
+        return True, None
+    if text in FALSY:
+        return False, None
+
+    return False, Rejection(
+        parameter="grayscale",
+        value=str(raw),
+        applied=False,
+        accepted="on or off",
+    )
+
+
+def validate_blur(raw: str | None, *, maximum: int) -> tuple[int, Rejection | None]:
+    """Resolve `blur` to an integer within its range.
+
+    Unlike `size`, this bound is fixed by the contract rather than by
+    deployment configuration, so it is part of the published interface
+    (docs/api-contract.md).
+    """
+    if raw is None:
+        return 0, None
+
+    parsed = _as_int(raw)
+    if parsed is not None and 0 <= parsed <= maximum:
+        return parsed, None
+
+    return 0, Rejection(
+        parameter="blur",
+        value=str(raw),
+        applied=0,
+        accepted=f"an integer from 0 to {maximum}",
+    )
+
+
 def validate(
     params,
     *,
     page_sizes: tuple[int, ...],
     default_count: int,
     catalogue_size: int,
+    default_size: str = "medium",
+    minimum_dimension: int = 16,
+    maximum_dimension: int = 1600,
+    maximum_blur: int = 10,
 ) -> Validated:
     """Validate a whole query string's worth of parameters.
+
+    One call for all five, because the shell view and the image views both need
+    the complete set — validating them piecemeal is how two callers end up
+    disagreeing about what a request meant.
 
     `count` is resolved first because it determines how many pages exist, and
     therefore what counts as a valid `page`. Validating them in the other order
     would judge `page` against the wrong bound whenever `count` was also
     supplied.
+
+    Each parameter is judged on its own, so **one bad value never discards a
+    good one beside it** — `?size=enormous&blur=6` renders at the default size
+    with blur 6 applied, and explains only the size
+    (docs/adr/0006-recover-and-explain.md).
     """
     count, count_rejection = validate_count(
         params.get("count"), allowed=page_sizes, default=default_count
@@ -227,6 +300,32 @@ def validate(
     page, page_rejection = validate_page(
         params.get("page"), last_page=total_pages(catalogue_size, count)
     )
+    size, size_rejection = validate_size(
+        params.get("size"),
+        default=default_size,
+        minimum=minimum_dimension,
+        maximum=maximum_dimension,
+    )
+    grayscale, grayscale_rejection = validate_grayscale(params.get("grayscale"))
+    blur, blur_rejection = validate_blur(params.get("blur"), maximum=maximum_blur)
 
-    rejections = [r for r in (count_rejection, page_rejection) if r is not None]
-    return Validated(page=page, count=count, rejections=rejections)
+    rejections = [
+        rejection
+        for rejection in (
+            count_rejection,
+            page_rejection,
+            size_rejection,
+            grayscale_rejection,
+            blur_rejection,
+        )
+        if rejection is not None
+    ]
+
+    return Validated(
+        page=page,
+        count=count,
+        size=size,
+        grayscale=grayscale,
+        blur=blur,
+        rejections=rejections,
+    )

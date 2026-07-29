@@ -13,7 +13,9 @@ import pytest
 from image_gallery.validation import (
     total_pages,
     validate,
+    validate_blur,
     validate_count,
+    validate_grayscale,
     validate_page,
     validate_size,
 )
@@ -241,6 +243,80 @@ def test_the_notice_token_is_a_token_not_a_sentence():
     assert rejection.notice == "invalid_page"
 
 
+# --- grayscale -----------------------------------------------------------
+
+
+def test_grayscale_is_off_when_not_asked_for():
+    """F3.3's default. A checkbox that is not ticked sends nothing at all."""
+    on, rejection = validate_grayscale(None)
+
+    assert on is False
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["1", "true", "on", "yes", "TRUE"])
+def test_grayscale_accepts_the_forms_a_url_or_a_form_can_produce(raw):
+    """A checkbox posts `on`; a hand-written URL is likelier to say `1` or
+    `true`. All are the same intent, so all are honoured."""
+    on, rejection = validate_grayscale(raw)
+
+    assert on is True
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["0", "false", "off", "no"])
+def test_grayscale_can_be_turned_off_explicitly(raw):
+    on, rejection = validate_grayscale(raw)
+
+    assert on is False
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["maybe", "2", "grey"])
+def test_an_uninterpretable_grayscale_falls_back_and_is_reported(raw):
+    on, rejection = validate_grayscale(raw)
+
+    assert on is False
+    assert rejection is not None
+    assert rejection.parameter == "grayscale"
+
+
+# --- blur ----------------------------------------------------------------
+
+
+def test_blur_is_zero_when_not_asked_for():
+    blur, rejection = validate_blur(None, maximum=10)
+
+    assert blur == 0
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw,expected", [("0", 0), ("5", 5), ("10", 10)])
+def test_blur_accepts_the_ends_and_middle_of_its_range(raw, expected):
+    """F3.4 — 0 to 10, and the ends are inside the range, not outside it."""
+    blur, rejection = validate_blur(raw, maximum=10)
+
+    assert blur == expected
+    assert rejection is None
+
+
+@pytest.mark.parametrize("raw", ["11", "-1", "100", "abc", "3.5", ""])
+def test_a_blur_outside_the_range_falls_back_to_none_and_is_reported(raw):
+    """The range is fixed by the contract rather than by configuration, so
+    unlike `size` this bound is part of the published interface."""
+    blur, rejection = validate_blur(raw, maximum=10)
+
+    assert blur == 0
+    assert rejection is not None
+    assert rejection.parameter == "blur"
+
+
+def test_a_rejected_blur_names_its_range():
+    _, rejection = validate_blur("11", maximum=10)
+
+    assert "0" in rejection.accepted and "10" in rejection.accepted
+
+
 # --- the two together ----------------------------------------------------
 
 
@@ -308,6 +384,45 @@ def test_nothing_supplied_is_valid():
 
     assert result.is_valid
     assert (result.page, result.count) == (1, 10)
+
+
+def test_validate_resolves_every_parameter_the_gallery_understands():
+    """One call, five parameters — the shell view and the image views both need
+    the whole set, and validating them piecemeal is how two callers end up
+    disagreeing about what a request meant."""
+    result = validate(
+        {"page": "2", "count": "20", "size": "large", "grayscale": "1", "blur": "5"},
+        page_sizes=PAGE_SIZES,
+        default_count=10,
+        catalogue_size=100,
+        default_size="medium",
+        minimum_dimension=16,
+        maximum_dimension=1600,
+        maximum_blur=10,
+    )
+
+    assert result.is_valid
+    assert (result.page, result.count) == (2, 20)
+    assert (result.size, result.grayscale, result.blur) == ("large", True, 5)
+
+
+def test_a_valid_filter_survives_an_invalid_one():
+    """F3.6's central promise, and a scenario asserts it directly: one bad
+    parameter must not discard the good ones alongside it."""
+    result = validate(
+        {"size": "enormous", "blur": "6"},
+        page_sizes=PAGE_SIZES,
+        default_count=10,
+        catalogue_size=100,
+        default_size="medium",
+        minimum_dimension=16,
+        maximum_dimension=1600,
+        maximum_blur=10,
+    )
+
+    assert result.size == "medium", "the bad size falls back"
+    assert result.blur == 6, "the good blur survives"
+    assert [r.parameter for r in result.rejections] == ["size"]
 
 
 def test_a_rejection_serialises_to_the_documented_error_shape():
