@@ -51,7 +51,7 @@ CATALOGUE_SIZE = 100
 #
 # Matched against the generated test name, which pytest-bdd derives from the
 # scenario title. A rename would silently drop an entry here and let the
-# scenario run warm — tests/unit/test_bdd_harness.py fails the build if that
+# scenario run warm — tests/unit/python/test_bdd_harness.py fails the build if that
 # happens.
 COLD_CACHE_SCENARIOS = {
     "test_images_never_seen_before_are_shown_as_unavailable",

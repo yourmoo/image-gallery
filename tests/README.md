@@ -9,7 +9,10 @@ tests/
   .coveragerc           coverage configuration
   conftest.py           shared fixtures
   cucumber_html.py      renders Cucumber JSON to a readable scenario report
-  unit/                 module tests and JSON API tests, in-process
+  js_tests.py           runs the client tests in a container, renders their report
+  unit/                 modules in isolation, both languages
+    python/             Django modules and views, in-process
+    js/                 the client's pure logic, via node --test
   features/             Gherkin .feature files — the behavioural spec
   e2e/                  step definitions and fixtures, Playwright (marked `e2e`)
     conftest.py         stack fixtures, fake-upstream client, shared steps
@@ -33,8 +36,20 @@ Two tiers, with **different measures of completeness**. See
 
 | Tier | Verifies | Measured by | Runs against |
 | --- | --- | --- | --- |
-| `unit/` | Modules in isolation, and the JSON API | **Coverage ≥70%** | Imported code, Django test client |
+| `unit/python/` | Django modules and views | **Coverage ≥70%** | Imported code, Django test client |
+| `unit/js/` | The client's pure logic | **Coverage ≥90%** | Node's test runner, in a container |
 | `e2e/` | All Gherkin scenarios | **Every scenario bound** | A real browser and a running container |
+
+`unit/` is one tier in two languages, not two tiers: both test modules in
+isolation and are measured by coverage. It is split because
+[ADR 20](../docs/adr/0020-ids-are-derived-in-the-browser.md) put page arithmetic
+on both sides of the wire — `gallery.py` and `derive.js` compute the same id
+range, and testing only the Python half would leave the half a user actually
+sees covered by end-to-end scenarios alone.
+
+The client floor is higher because that code is pure: no I/O, no framework, and
+no branches that are awkward to reach, so anything uncovered there is simply
+untested.
 
 **Every `.feature` scenario runs in `e2e/`, without exception** — including
 `health.feature`, which could run in-process. One tier means one scenario
@@ -263,52 +278,85 @@ All artifacts land in `tests/reports/`, which is gitignored.
 | --- | --- |
 | Which scenarios passed or failed? | `tests/reports/e2e/scenarios.html` |
 | Why did that scenario fail — which step? | `tests/reports/e2e/scenarios.html` (errors inline) |
-| What is the coverage percentage? | terminal, or `tests/reports/unit/htmlcov/index.html` |
-| Which lines are uncovered? | `tests/reports/unit/htmlcov/index.html` |
-| Which unit tests ran? | `tests/reports/unit/report.html` |
+| What is the Python coverage percentage? | terminal, or `tests/reports/unit/python/htmlcov/index.html` |
+| Which Python lines are uncovered? | `tests/reports/unit/python/htmlcov/index.html` |
+| Which Python unit tests ran? | `tests/reports/unit/python/report.html` |
+| Which client unit tests ran, and their coverage? | `tests/reports/unit/js/report.html` |
 | Scenario results for a CI tool | `tests/reports/e2e/cucumber.json` |
 
 Paths are relative to the project root, so from a terminal there:
 
 ```powershell
 start tests\reports\e2e\scenarios.html
-start tests\reports\unit\htmlcov\index.html
+start tests\reports\unit\python\htmlcov\index.html
+start tests\reports\unit\js\report.html
 ```
 
-**The two tiers report separately, into separate directories.** They measure
-different things ([ADR 15](../docs/adr/0015-test-strategy.md)) — the unit tier
-is measured by coverage, the behavioural tier by scenarios passing — so merging
-them into one report would blur both.
+**Every tier reports separately, into its own directory.** They measure
+different things ([ADR 15](../docs/adr/0015-test-strategy.md)) — the unit tiers
+are measured by coverage, the behavioural tier by scenarios passing — so merging
+them would blur all three.
 
 ```text
 tests/reports/
   unit/
-    report.html          test results
-    htmlcov/index.html   coverage, browsable
+    python/
+      report.html        test results
+      htmlcov/index.html coverage, browsable
+    js/
+      report.html        test results and coverage
+      lcov.info          coverage, machine-readable
   e2e/
     report.html          test results
     scenarios.html       Given/When/Then, browsable
     cucumber.json        scenario-level results, machine-readable
 ```
 
-Each tier's command writes only its own directory. Running the e2e command
-produces no coverage report, and the unit command produces no Cucumber report —
-expected, not a misconfiguration.
+The layout mirrors `tests/unit/`, which holds `python/` and `js/` for the same
+reason: they are two implementations of one tier — modules tested in isolation —
+and they run on different toolchains.
 
-### Unit tier
+Each command writes only its own directory. Running the e2e command produces no
+coverage report, and the unit command produces no Cucumber report — expected,
+not a misconfiguration.
 
-Results plus browsable coverage, into `tests/reports/unit/`:
+### Unit tier — Python
+
+Results plus browsable coverage, into `tests/reports/unit/python/`:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m "not e2e" `
-  --html=tests/reports/unit/report.html --self-contained-html `
+  --html=tests/reports/unit/python/report.html --self-contained-html `
   --cov --cov-config=tests/.coveragerc `
-  --cov-report=html:tests/reports/unit/htmlcov --cov-report=term-missing
+  --cov-report=html:tests/reports/unit/python/htmlcov --cov-report=term-missing
 ```
 
 Without `--cov-report=html` only the terminal summary appears and no browsable
 report is written. The raw `.coverage` database is deleted once reports are
 generated.
+
+### Unit tier — client
+
+The browser's own logic, run by Node's built-in test runner **in a container**,
+so no JavaScript toolchain is installed locally:
+
+```powershell
+.\.venv\Scripts\python.exe tests/js_tests.py
+```
+
+That wrapper runs the tests, collects coverage, and writes
+`tests/reports/unit/js/report.html`. It exits non-zero if a test fails or
+coverage falls below its floor, so it can gate a build. To run the tests
+directly without a report:
+
+```powershell
+docker run --rm -v "${PWD}:/app" -w /app node:22-slim `
+  node --test --test-reporter=spec "tests/unit/js/*.test.js"
+```
+
+There is no `package.json` and no `node_modules`. See
+[unit/js/README.md](unit/js/README.md) for what belongs in this tier and why it
+is restricted to pure functions.
 
 ### Behavioural tier
 

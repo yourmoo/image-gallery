@@ -1,125 +1,81 @@
 /*
- * The gallery client.
+ * The gallery client: DOM wiring only.
  *
- * Builds the grid from the bounds the shell published, deriving the id range
- * for the current page rather than fetching it
- * (docs/adr/0020-ids-are-derived-in-the-browser.md). There is no metadata call:
- * page loading is one document request, then one image request per tile.
+ * Every decision this file makes is delegated to derive.js, which is pure and
+ * unit-tested (tests/unit/js/derive.test.js). What is left here is construction and
+ * insertion — the parts that need a document and are covered by the browser
+ * tier instead.
+ *
+ * The grid is built from bounds the shell published rather than fetched: there
+ * is no metadata call (docs/adr/0020-ids-are-derived-in-the-browser.md).
+ * Loading a page is one document request, then one image request per tile.
  *
  * Stage 1 stops at the placeholders. Stage 2 gives each tile an <img> pointing
- * at this application's `image` endpoint — the browser never contacts the image
+ * at this application's `image` endpoint — the browser never contacts the
  * provider directly (docs/adr/0003-django-as-image-proxy.md), and the id a tile
  * carries is what the server reads as the provider's seed
  * (docs/adr/0009-url-vocabularies.md).
- *
- * The bounds are read from the document, never assumed: catalogue size and page
- * size are deployment configuration, and a default hardcoded here would be a
- * second place that could disagree with settings.py.
  */
 
-(function () {
-  "use strict";
+import { imageIds, noticeMessages, readBounds } from "./derive.js";
 
-  var grid = document.getElementById("gallery");
-  if (!grid) return;
+const grid = document.getElementById("gallery");
 
-  function readBound(name) {
-    var value = Number(grid.dataset[name]);
-    return Number.isFinite(value) && value > 0 ? value : null;
+/* Markup follows docs/ui/design-system.md § Image grid. The frame holds its
+ * aspect ratio from the moment it is created, so the grid reserves its full
+ * layout before any image loads and never reflows as they arrive. */
+function buildTile(id) {
+  const tile = document.createElement("li");
+  tile.className = "tile";
+  tile.dataset.testid = "image-tile";
+  tile.dataset.imageId = String(id);
+  tile.dataset.state = "pending";
+
+  const frame = document.createElement("span");
+  frame.className = "tile__frame";
+  tile.appendChild(frame);
+
+  return tile;
+}
+
+/* Created on demand rather than revealed: the scenario "no validation message
+ * is shown" asserts the element is absent, so an always-present empty banner
+ * would fail it. Inserted above the grid, which renders normally beneath — the
+ * notice is informational, not an error page
+ * (docs/adr/0006-recover-and-explain.md). */
+function showNotice(message) {
+  const banner = document.createElement("p");
+  banner.className = "notice";
+  banner.dataset.testid = "notice";
+  banner.setAttribute("role", "status");
+  banner.textContent = message;
+
+  grid.parentNode.insertBefore(banner, grid);
+}
+
+function render() {
+  const bounds = readBounds(grid.dataset);
+
+  /* Unusable bounds mean the shell did not render what this script requires.
+   * Failing visibly beats an empty grid, which would look like an empty
+   * catalogue rather than a broken page. */
+  if (bounds === null) {
+    showNotice("The gallery could not be loaded.");
+    return;
   }
 
-  /* The same arithmetic the server uses to validate a page number
-   * (image_gallery/gallery.py). The two must agree: this side decides what to
-   * render, that side decides what is in range, and a divergence would show as
-   * tiles requesting ids the server rejects.
-   *
-   * Clamped at the catalogue's end so a short final page carries what remains
-   * rather than running past the bound. */
-  function imageIds(page, count, catalogueSize) {
-    var first = (page - 1) * count + 1;
-    if (first > catalogueSize) return [];
-
-    var last = Math.min(first + count - 1, catalogueSize);
-    var ids = [];
-    for (var id = first; id <= last; id++) ids.push(id);
-    return ids;
+  const fragment = document.createDocumentFragment();
+  for (const id of imageIds(bounds.page, bounds.count, bounds.catalogueSize)) {
+    fragment.appendChild(buildTile(id));
   }
 
-  /* A tile is a placeholder frame that an image later fades into. The frame
-   * holds its aspect ratio from the moment it is created (app.css
-   * `.tile__frame`), so the grid reserves its full layout before any image has
-   * loaded and never reflows as they arrive. */
-  function buildTile(id) {
-    var tile = document.createElement("li");
-    tile.className = "tile";
-    tile.dataset.testid = "image-tile";
-    tile.dataset.imageId = String(id);
-    tile.dataset.state = "pending";
+  grid.replaceChildren(fragment);
+  grid.dataset.state = "ready";
+}
 
-    var frame = document.createElement("span");
-    frame.className = "tile__frame";
-    tile.appendChild(frame);
+if (grid) {
+  const tokens = new URLSearchParams(window.location.search).getAll("notice");
+  for (const message of noticeMessages(tokens)) showNotice(message);
 
-    return tile;
-  }
-
-  /* Created on demand rather than revealed: "no validation message is shown"
-   * asserts the element is absent, so an always-present empty banner would
-   * fail it. Inserted before the grid, which renders normally beneath — the
-   * notice is informational, not an error page
-   * (docs/adr/0006-recover-and-explain.md). */
-  function showNotice(message) {
-    var banner = document.createElement("p");
-    banner.className = "notice";
-    banner.dataset.testid = "notice";
-    banner.setAttribute("role", "status");
-    banner.textContent = message;
-
-    grid.parentNode.insertBefore(banner, grid);
-  }
-
-  /* The wording lives here rather than in the URL: `?notice=` carries a token
-   * so the address stays short and the phrasing stays a UI concern
-   * (docs/adr/0006-recover-and-explain.md). Several parameters can be invalid
-   * at once, so the key repeats and every message is shown. */
-  var NOTICES = {
-    invalid_page: "That page doesn't exist — showing page 1.",
-    invalid_count: "That image count isn't available — showing 10 per page.",
-  };
-
-  function showNotices() {
-    var tokens = new URLSearchParams(window.location.search).getAll("notice");
-    var messages = tokens
-      .map(function (token) {
-        return NOTICES[token];
-      })
-      .filter(Boolean);
-
-    if (messages.length) showNotice(messages.join(" "));
-  }
-
-  function render() {
-    var page = readBound("page");
-    var count = readBound("count");
-    var catalogueSize = readBound("catalogueSize");
-
-    /* Absent or unusable bounds mean the shell did not render what this script
-     * requires. Failing visibly beats rendering an empty grid that looks like
-     * an empty catalogue. */
-    if (page === null || count === null || catalogueSize === null) {
-      showNotice("The gallery could not be loaded.");
-      return;
-    }
-
-    var fragment = document.createDocumentFragment();
-    imageIds(page, count, catalogueSize).forEach(function (id) {
-      fragment.appendChild(buildTile(id));
-    });
-
-    grid.replaceChildren(fragment);
-    grid.setAttribute("aria-busy", "false");
-  }
-
-  showNotices();
   render();
-})();
+}

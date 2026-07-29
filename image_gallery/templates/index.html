@@ -35,5 +35,10 @@ so restyling cannot break a test.
     data-catalogue-size="{{ catalogue_size }}"
   ></ul>
 
-  <script src="{% static 'js/gallery.js' %}" defer></script>
+  {% comment %}
+  A module, because gallery.js imports the pure half it delegates to
+  (derive.js, unit-tested in tests/js/). Modules are deferred by default, so
+  no `defer` is needed and the DOM is ready when it runs.
+  {% endcomment %}
+  <script type="module" src="{% static 'js/gallery.js' %}"></script>
 {% endblock %}

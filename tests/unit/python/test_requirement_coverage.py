@@ -17,7 +17,8 @@ from pathlib import Path
 
 import pytest
 
-TESTS = Path(__file__).resolve().parents[1]
+# tests/unit/python/ -> tests/
+TESTS = Path(__file__).resolve().parents[2]
 FEATURES = TESTS / "features"
 PYTEST_INI = TESTS / "pytest.ini"
 CORE_FEATURES = TESTS.parent / "docs" / "core-features.md"

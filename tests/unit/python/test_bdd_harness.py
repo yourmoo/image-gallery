@@ -15,8 +15,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-FEATURES = Path(__file__).resolve().parents[1] / "features"
-E2E_CONFTEST = Path(__file__).resolve().parents[1] / "e2e" / "conftest.py"
+# tests/unit/python/ -> tests/
+TESTS = Path(__file__).resolve().parents[2]
+FEATURES = TESTS / "features"
+E2E_CONFTEST = TESTS / "e2e" / "conftest.py"
 
 
 def _scenario_test_names(feature: Path) -> set[str]:
