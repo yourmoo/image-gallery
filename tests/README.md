@@ -11,9 +11,14 @@ tests/
   cucumber_html.py      renders Cucumber JSON to a readable scenario report
   unit/                 module tests and JSON API tests, in-process
   features/             Gherkin .feature files — the behavioural spec
-  e2e/                  step definitions, Playwright (marked `e2e`)
+  e2e/                  step definitions and fixtures, Playwright (marked `e2e`)
+    conftest.py         stack fixtures, fake-upstream client, shared steps
+    fake_upstream/      the picsum.dev stand-in and its Dockerfile
   reports/              generated coverage and report output (gitignored)
 ```
+
+The stack the behavioural tier runs against is defined in `compose.e2e.yaml` at
+the project root, next to the `compose.yaml` used for ordinary deployment.
 
 Because the configuration is not at the project root, **every command must pass
 `-c tests/pytest.ini`**. Run them from the project root.
@@ -42,11 +47,12 @@ scenarios therefore run in a browser.
 
 **Coverage is a unit-test measure, deliberately.** Browser tests exercise Django
 inside a container the in-process coverage tool cannot observe, so `unit/`
-carries the 70% gate alone. That is the right place for it: `validation.py`,
-`provider.py`, `cache.py`, and `gallery.py` are pure or near-pure and are more
-precisely tested directly than inferred through a browser. The JSON API is
-tested here too, through the Django test client — request/response assertions
-need no browser.
+carries the 70% gate alone. That is the right place for it: the service modules
+`validation.py`, `provider.py`, `cache.py`, and `gallery.py` — planned in
+[ADR 13](../docs/adr/0013-module-structure.md), not yet written — will be pure
+or near-pure and are more precisely tested directly than inferred through a
+browser. The JSON API is tested here too, through the Django test client:
+request and response assertions need no browser.
 
 **Gherkin completeness is the behavioural measure.** A coverage percentage says
 nothing about whether pagination was exercised. The equivalent guarantee is that
@@ -76,6 +82,37 @@ The last line is only needed for the end-to-end tests.
 
 ## Unit tests
 
+### How unit tests work
+
+In-process: pytest imports the code and calls it directly. No server, no
+browser, no container — which is why the whole tier runs in about two seconds
+and can be left running while editing.
+
+`pytest-django` supplies the settings, so anything reading `django.conf.settings`
+behaves as it would in the application. `DJANGO_SETTINGS_MODULE` is set in
+`pytest.ini`, not in each test.
+
+What lives here:
+
+| Kind | Example | Why here rather than a scenario |
+| --- | --- | --- |
+| Settings and configuration | `test_settings.py` | Asserts the shape of `CACHES`, `DATABASES`, and the env-var contract — invisible from a browser |
+| Documented contracts | `test_api_contract.py` | Fails when `docs/api-contract.md` and the routes disagree |
+| Harness integrity | `test_bdd_harness.py`, `test_requirement_coverage.py` | Guard the test suite itself — a renamed scenario, an untagged requirement |
+| The JSON API | through the Django test client | Request and response assertions need no JavaScript |
+| Pure logic | validation, URL translation, cache tiering | More precisely tested directly than inferred through a page |
+
+Two of these are worth calling out because they test the tests:
+
+- `test_requirement_coverage.py` fails if a requirement in
+  `docs/core-features.md` has no scenario, if a scenario names a requirement
+  that does not exist, or if a scenario carries no build stage.
+- `test_bdd_harness.py` fails if the cold-cache list in `e2e/conftest.py` names
+  a scenario that has been renamed — a coupling that would otherwise break
+  silently and let a cache scenario run against a warm cache.
+
+### Running them
+
 The `-m "not e2e"` filter deselects the browser tests, leaving the unit and BDD
 suites:
 
@@ -99,7 +136,7 @@ generated artifact and is gitignored — safe to delete at any time.
 
 ## Behavioural tests
 
-The Playwright tests drive a real browser against a **running server**, so start
+The Playwright tests drive a real browser against a **running stack**, so start
 one first. This is where every Gherkin scenario runs.
 
 Alongside the scenarios, this tier keeps a few deployment checks that only a
@@ -109,24 +146,94 @@ real browser can make:
 - Declared assets resolve and have the right content type
 - An `<img>` served by the proxy endpoint actually renders
 
-Using the container:
+### How behavioural tests work
 
-```powershell
-docker compose up -d
-.\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m e2e --no-cov
-docker compose down
+A `.feature` file is the specification; a step definition is the code that makes
+one Gherkin line executable. `pytest-bdd` matches them by text, so this line:
+
+```gherkin
+Then the page shows images 11 to 20
 ```
 
-The default target is `http://localhost:8080`, which matches the port published
-by `compose.yaml`. Point the suite elsewhere with `E2E_BASE_URL`:
+runs the function decorated with
+`@then(parsers.parse("the page shows images {first:d} to {last:d}"))`.
+
+**Steps drive the browser, never the code.** No step imports Django,
+instantiates a view, or uses the test client — the application is a black box
+reached over HTTP. That is what keeps a scenario honest about what a user can
+actually observe. The single exception is the fake upstream's request log,
+described above, which answers questions the browser cannot.
+
+Where the code lives:
+
+| File | Holds |
+| --- | --- |
+| `e2e/conftest.py` | The stack fixtures, the fake-upstream client, and every step used by more than one feature file |
+| `e2e/test_gallery_steps.py` | Steps unique to `gallery.feature` |
+| `e2e/test_variations_steps.py` | Steps unique to `variations.feature` |
+| `e2e/test_detail_steps.py` | Steps unique to `detail.feature` |
+| `e2e/test_health_steps.py` | Steps for `health.feature` |
+
+Shared steps sit in `conftest.py` because pytest-bdd resolves step definitions
+from there across every feature file — one definition of "the response status is
+200" rather than four that can drift apart.
+
+**Elements are found by `data-testid`, never by CSS class**, so restyling cannot
+break a test. The hooks each module expects are listed in its docstring, and
+they are a contract: the templates have to provide them.
+
+**Scenario isolation.** An autouse fixture resets the fake's request log and
+faults before every scenario. Three scenarios also need an empty image cache —
+they are listed in `COLD_CACHE_SCENARIOS`, and the cache directory is emptied
+for those alone rather than restarting the container.
+
+### The stack
+
+`compose.e2e.yaml` runs two services, and the suite starts them itself if they
+are not already up:
 
 ```powershell
-$env:E2E_BASE_URL = 'http://localhost:8000'
+docker compose -f compose.e2e.yaml up -d --build
+$env:E2E_BASE_URL = 'http://127.0.0.1:8081'
 .\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m e2e --no-cov
+docker compose -f compose.e2e.yaml down -v
 ```
 
-That form is useful against a local `image-gallery-admin runserver` instead of
-the container.
+| Service | Port | What it is |
+| --- | --- | --- |
+| `web` | 8081 | The **production image**, built from the shipping `Dockerfile` |
+| `fake-upstream` | 8091 | A stand-in for picsum.dev, with a control API |
+
+**`web` is the real image, not a development server.** It runs gunicorn with the
+same worker model that ships, which matters because each worker holds part of
+the picture: the cache is shared through a tmpfs mount
+([ADR 18](../docs/adr/0018-shared-cache-in-shared-memory.md)), and a harness
+running a single `runserver` process could not observe whether that sharing
+works.
+
+**`fake-upstream` replaces picsum.dev** so scenarios are deterministic and
+offline. It serves the upstream vocabulary from
+[ADR 9](../docs/adr/0009-url-vocabularies.md) —
+`/{width}/{height}?seed=N&grayscale=1&blur=M` — records every request, and
+injects faults on demand. Steps drive it over HTTP:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /_control/faults` | Fail specific seeds, take the upstream down, or hang past the timeout |
+| `GET /_control/requests` | Every request the application made, with parsed parameters |
+| `POST /_control/reset` | Clear the log and all faults — runs before every scenario |
+
+That control surface lives only on the fake. The application image carries no
+test scaffolding, which is what the project's SOLID and 12-factor guardrails
+require.
+
+`GET /_control/requests` is also the only way several scenarios can be asserted
+at all: "no upstream image requests are made" is a claim about what Django did,
+and the browser cannot see that.
+
+Point the suite at a different target with `E2E_BASE_URL` — useful against a
+local `image-gallery-admin runserver`, though the cache and worker behaviour
+will not match the container.
 
 Useful Playwright flags: `--headed` to watch the browser, `--slowmo=500` to slow
 it down, `--browser firefox` to switch engine (install it first with
@@ -134,16 +241,39 @@ it down, `--browser firefox` to switch engine (install it first with
 
 ## Everything at once
 
-Requires a running server, since the e2e tests are included:
+Requires the stack, since the e2e tests are included:
 
 ```powershell
-docker compose up -d
+docker compose -f compose.e2e.yaml up -d --build
+$env:E2E_BASE_URL = 'http://127.0.0.1:8081'
 .\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini
 ```
+
+Expect this to take several minutes — the behavioural tier drives a real browser
+through 81 scenarios, and most of them currently fail while waiting for elements
+that do not exist yet.
 
 ## Reports
 
 All artifacts land in `tests/reports/`, which is gitignored.
+
+**Where to look, by question:**
+
+| Question | Open |
+| --- | --- |
+| Which scenarios passed or failed? | `tests/reports/e2e/scenarios.html` |
+| Why did that scenario fail — which step? | `tests/reports/e2e/scenarios.html` (errors inline) |
+| What is the coverage percentage? | terminal, or `tests/reports/unit/htmlcov/index.html` |
+| Which lines are uncovered? | `tests/reports/unit/htmlcov/index.html` |
+| Which unit tests ran? | `tests/reports/unit/report.html` |
+| Scenario results for a CI tool | `tests/reports/e2e/cucumber.json` |
+
+Paths are relative to the project root, so from a terminal there:
+
+```powershell
+start tests\reports\e2e\scenarios.html
+start tests\reports\unit\htmlcov\index.html
+```
 
 **The two tiers report separately, into separate directories.** They measure
 different things ([ADR 15](../docs/adr/0015-test-strategy.md)) — the unit tier
@@ -182,11 +312,11 @@ generated.
 
 ### Behavioural tier
 
-Results and scenario-level JSON, into `tests/reports/e2e/`. Needs a running
-server:
+Results and scenario-level JSON, into `tests/reports/e2e/`. Needs the stack:
 
 ```powershell
-docker compose up -d
+docker compose -f compose.e2e.yaml up -d --build
+$env:E2E_BASE_URL = 'http://127.0.0.1:8081'
 .\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m e2e --no-cov `
   --html=tests/reports/e2e/report.html --self-contained-html `
   --cucumber-json=tests/reports/e2e/cucumber.json
@@ -232,28 +362,65 @@ be bound to a step definition:
   --generate-missing --feature tests/features
 ```
 
-It names each unbound scenario with its file and line.
+It names each unbound scenario with its file and line. All 81 are currently
+bound, so this reports nothing.
+
+A quicker check that the same thing still holds — collection fails on an unbound
+step, so a successful collect is the gate:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini tests/e2e --collect-only -q
+```
+
+Note that an editor's Gherkin plugin may flag steps in the feature files as
+undefined. Most look only in step-definition modules, not in `conftest.py`,
+where the shared steps live. pytest is the authority: if collection succeeds,
+every step is bound.
 
 ## Current results
 
+Measured 2026-07-29, before any gallery code exists.
+
 | Suite | Result |
 | --- | --- |
-| Unit | 17 passed |
-| Coverage | 93% (gate: 70%) |
-| Browser (2 BDD scenarios + 4 smoke) | 6 passed |
-| Total | 23 passed |
+| Unit | 35 passed, 1 skipped |
+| Coverage | 94% (gate: 70%) |
+| Behavioural | 81 scenarios — 12 pass, 69 fail |
 
-Coverage is measured on the in-process tiers only. Browser tests exercise Django
-inside a container the coverage tool cannot see, so `unit/` and `bdd/` carry the
-70% gate between them.
+**The behavioural tier is meant to be red.** The scenarios were written before
+the code, so they describe a gallery that has not been built. A scenario failing
+with `locator resolved to 0 elements` is the specification doing its job.
+
+Of the 12 that pass, only 6 mean anything: the four deployment smoke checks and
+the two health scenarios. The other 6 are **vacuous** — assertions about
+*absence* that an empty page satisfies:
+
+| Scenario | Passes because |
+| --- | --- |
+| The first page has no previous page | Nothing renders, so no link exists |
+| A valid page is not redirected | The placeholder returns 200 with no notice |
+| An image outside the collection is not found (×4) | `/images/101` 404s because no route exists |
+
+They become real assertions once there is a gallery to contradict them. Until
+then, treat 12 as the count to watch rather than a measure of progress.
+
+Coverage is measured on the unit tier only. Browser tests exercise Django inside
+a container the in-process coverage tool cannot see, so including them would
+understate coverage rather than add to it.
 
 ## What is covered
 
 - Health endpoint status code and JSON payload
 - Landing page rendering
-- Settings invariants: no relational database, bounded cache, gallery defaults,
-  and that `settings.py` is the only module reading `os.environ`
+- Settings invariants: no relational database, a cache that can be shared
+  between workers, gallery defaults, and that `settings.py` is the only module
+  reading `os.environ`
+- The documented API contract, which fails the build when `docs/api-contract.md`
+  and the routes disagree
 - JSON log formatting, including quote/newline escaping and `extra=` context
+- **The test suite's own integrity** — that every requirement has a scenario,
+  every scenario names a real requirement and a build stage, and the cold-cache
+  list has not been broken by a rename
 - BDD scenarios covering health and the landing page end to end
 - Browser-level verification against the running container, including that
   **every subresource the page requests returns below 400**
@@ -357,19 +524,31 @@ timeout behaviour per [ADR 12](../docs/adr/0012-resilience-strategy.md).
 ## Adding a BDD scenario
 
 1. Add or extend a `.feature` file in `features/`.
-2. Add matching step definitions in `bdd/`, in a file named `test_*.py`.
-3. Bind them with `scenarios("<name>.feature")` — paths resolve relative to
+2. Tag it with the requirement it covers and the build stage it belongs to —
+   `@F3_4 @stage7`. Declare any new tag in `pytest.ini`, or `--strict-markers`
+   fails the run.
+3. Add matching step definitions in `e2e/`, in a file named `test_*.py`. If the
+   step is used by more than one feature file, put it in `e2e/conftest.py`
+   instead, where pytest-bdd resolves it for all of them.
+4. Bind the file with `scenarios("<name>.feature")` — paths resolve relative to
    `features/` via `bdd_features_base_dir`.
 
 Steps stay **business-facing and declarative**: "the gallery is available", not
-"the provider stub returns 200". The mocking mechanism is a step-definition
-detail and must not appear in the Gherkin.
+"the fake upstream returns 200". The fault-injection mechanism is a
+step-definition detail and must not appear in the Gherkin.
 
-Upstream is stubbed at the provider boundary, so scenarios asserting on upstream
-call counts (`Then 10 upstream image requests are made`) count calls to that
-stub. Those steps must genuinely count — asserting on rendered tiles instead
-would let a serial or uncached implementation pass.
+**Assert through the browser.** A step drives the page and reads the DOM; it
+does not import Django, build a view, or use the test client. Find elements by
+`data-testid`, never by CSS class, so restyling cannot break a test.
 
-**Do not add browser tests for behaviour.** If a scenario can be verified
-through the test client, it belongs here. The browser tier is for deployment
-correctness only — see [Strategy](#strategy).
+The one exception is the fake upstream's request log. Scenarios asserting on
+upstream call counts (`Then 10 upstream image requests are made`) read it,
+because the browser cannot see what Django fetched. Those steps must genuinely
+count — asserting on rendered tiles instead would let an uncached implementation
+pass.
+
+**Behaviour belongs in a scenario, not in a unit test.** The gallery is
+client-rendered, so the Django test client cannot verify it — it does not run
+JavaScript and would only ever see an empty shell. Reserve `unit/` for
+configuration, contracts, and pure logic. See
+[ADR 15](../docs/adr/0015-test-strategy.md).
