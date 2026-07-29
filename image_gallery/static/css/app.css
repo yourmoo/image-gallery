@@ -68,6 +68,12 @@ main {
  * Informational, not an error page: the gallery renders beneath it. Handles
  * multiple messages, because several parameters can be invalid at once. */
 
+/* `display: flex` would otherwise override the `hidden` attribute, so an empty
+ * banner renders on every page that has nothing to say. */
+.notice[hidden] {
+  display: none;
+}
+
 .notice {
   background: var(--notice-bg);
   color: var(--notice-fg);

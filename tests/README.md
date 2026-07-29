@@ -494,7 +494,7 @@ before it — so they are a sequence, not a grouping.
 
 | Stage | Covers | Why here |
 | --- | --- | --- |
-| 1 | Metadata endpoint and the grid | Nothing else can be asserted until tiles render |
+| 1 | The shell's bounds and the grid | Nothing else can be asserted until tiles render |
 | 2 | The image proxy, one call per tile | Real bytes, and the cache path |
 | 3 | Pagination | Needs a grid to page through |
 | 4 | The image-count control | Needs the grid; F2.5 requires a real control |

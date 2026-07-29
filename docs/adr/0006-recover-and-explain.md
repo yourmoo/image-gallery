@@ -33,16 +33,24 @@ The two consumers differ, per [ADR 2](0002-client-side-rendering.md):
 | JSON API | **400** with a machine-readable error naming the parameter and value |
 | Browser UI | Renders with the fallback applied, plus a notice |
 
-The client makes this coherent: it calls the API, receives the validation error,
-re-requests with defaults, and displays the notice. A program gets a real
-rejection it can act on; a person who pasted a bad URL gets a gallery and an
-explanation.
+> **Amended 2026-07-29.** This ADR originally made the client reconcile the two
+> by calling the API, receiving the 400, and *re-requesting with defaults*. That
+> second request is gone: recovery now happens at the document boundary, before
+> the client makes any API call, and a `400` carries no page data.
+> [ADR 19](0019-validation-errors-carry-a-usable-payload.md) records why. The
+> decision below — reject at the boundary, recover in the UI — is unchanged; only
+> the mechanism is.
 
-For an invalid page specifically, brief line 48 requires a redirect. On the
-initial document request — where a bad URL can be pasted or bookmarked — the
-shell view redirects, carrying the notice as a query parameter:
+Recovery happens on the initial document request, where a bad URL can be pasted
+or bookmarked. The shell view validates, applies the fallbacks, and redirects to
+the corrected address, carrying the notice as a query parameter:
 
     GET /?page=abc  →  302  →  /?page=1&notice=invalid_page
+
+The client therefore boots with parameters that are valid by construction, and
+every subsequent API call it makes is built from its own allow-listed controls.
+A program calling the API directly still gets a real rejection it can act on; a
+person who pasted a bad URL gets a gallery and an explanation.
 
 For in-app navigation, where no document request occurs, the client corrects the
 URL with `history.replaceState` and shows the same notice. Both paths call the
@@ -65,7 +73,8 @@ renders at the default size with blur 6 applied, and explains only the size. The
 Gherkin asserts this directly.
 
 **Several parameters can be invalid at once**, so the notice is a list rather
-than a single string. The design system's notice component is built for that.
+than a single string — `?notice=` may repeat. The design system's notice
+component is built for that.
 
 **The notice travels in the URL.** A direct consequence of having no sessions.
 It is stateless and bookmarkable; the cost is a slightly noisier URL after a

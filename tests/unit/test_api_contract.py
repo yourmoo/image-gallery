@@ -30,17 +30,25 @@ UNDOCUMENTED_BY_DESIGN: set[str] = set()
 def _documented_routes() -> dict[str, str]:
     """Parse the Endpoints table into {route name: path}.
 
-    Only the first table under `## Endpoints` is read. The "Planned endpoints"
-    table is deliberately excluded — those routes are specified but not yet
-    served, so enforcing them would fail the build for work not yet started.
+    Only the **first table** under `## Endpoints` is read, and reading stops at
+    the blank line that ends it. Scanning to the next heading instead would
+    swallow any other table in the section — the `index` description carries one
+    describing its data attributes — and silently treat its rows as routes.
+
+    The "Planned endpoints" table is excluded for a different reason: those
+    routes are specified but not yet served, so enforcing them would fail the
+    build for work not yet started.
     """
     text = CONTRACT_PATH.read_text(encoding="utf-8")
     section = text.split("## Endpoints", 1)[1].split("## Planned endpoints", 1)[0]
 
     routes = {}
     for line in section.splitlines():
+        stripped = line.strip()
+        if routes and not stripped.startswith("|"):
+            break  # the table ended; anything further is prose or another table
         # | `name` | `/path` | GET | ... |
-        match = re.match(r"\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|", line.strip())
+        match = re.match(r"\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|", stripped)
         if match:
             routes[match.group(1)] = match.group(2)
 

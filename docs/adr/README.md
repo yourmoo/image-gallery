@@ -15,7 +15,7 @@ given a speculative ADR.
 | [3](0003-django-as-image-proxy.md) | Django proxies image bytes | The browser never learns picsum.dev exists; caching means bytes, not metadata |
 | [4](0004-bounded-catalogue.md) | Bounded catalogue via config | Gives a real last page; instances cannot disagree about the bound |
 | [5](0005-service-layer-boundary.md) | Service layer owns the provider | Views and templates never construct an image URL |
-| [6](0006-recover-and-explain.md) | Invalid parameters recover | Bad values fall back and explain; the page still renders 200 |
+| [6](0006-recover-and-explain.md) | Invalid parameters recover | Bad values fall back and explain; recovery mechanism **amended by 19** |
 | [7](0007-detail-view-size.md) | Detail view always renders large | Size is presentation; only filters carry over |
 | [8](0008-configuration-in-settings.md) | `settings.py` alone reads the environment | Enforced by an AST test, not convention |
 | [9](0009-url-vocabularies.md) | Client and upstream URLs are separate vocabularies | Client URLs survive a provider change; `seed` never reaches the browser |
@@ -28,6 +28,8 @@ given a speculative ADR.
 | [16](0016-api-contract.md) | Hand-written contract, test-enforced | Drift fails the build; no OpenAPI, no new dependency |
 | [17](0017-image-fetch-timing.md) | Images fetched per browser request, not during the metadata call | `/api/images` makes no upstream call; no server-side thread pool; the degraded banner is counted client-side |
 | [18](0018-shared-cache-in-shared-memory.md) | Cache in tmpfs, shared by every worker | Replaces the per-process cache of **11**; corrects 11's claim that LocMemCache evicts LRU-style |
+| [19](0019-validation-errors-carry-a-usable-payload.md) | A 400 carries errors only; recovery happens at the document boundary | Amends **6**'s re-request; the client cannot send an invalid parameter, so a 400 in the browser is a client bug |
+| [20](0020-ids-are-derived-in-the-browser.md) | No page-metadata endpoint; the client derives the id range | Removes the `/api/images` of **17**; page arithmetic now runs on both sides and must agree |
 
 ## Format
 

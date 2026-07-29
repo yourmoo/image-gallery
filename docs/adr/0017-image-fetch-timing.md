@@ -32,12 +32,18 @@ results it does not use, purely to warm the cache for the requests that follow.
 
 ## Decision
 
-**`/api/images` performs no upstream I/O. Image bytes are fetched by
-`/images/{id}`, one request per image, when the browser asks for it.**
+**Image bytes are fetched by `/images/{id}`, one request per image, when the
+browser asks for it. Nothing fetches them earlier.**
 
-The metadata endpoint reads settings, validates parameters, computes the id
-range, and reverses URLs. It never calls picsum, so its latency is independent
-of upstream health.
+> **Amended 2026-07-29.** This ADR was written when a `/api/images` metadata
+> endpoint preceded those requests, and its reasoning below is phrased in terms
+> of that call. The endpoint has since been removed — the observation that it
+> had nothing to learn from upstream was followed to its conclusion, and the
+> client now derives the id range from bounds the shell publishes
+> ([ADR 20](0020-ids-are-derived-in-the-browser.md)). **The decision this ADR
+> makes is unaffected**: fetch timing, per-tile failure, and the concurrency
+> analysis all concern `/images/{id}`, which is unchanged. Read "the metadata
+> call" below as "the document request".
 
 ### The unit of fan-out changes
 
@@ -56,9 +62,11 @@ rather than during page assembly. A failing image cannot be mentioned in the
 attempted.
 
 The degraded banner is therefore assembled **client-side**: the grid counts
-tiles that failed to load and renders the notice itself. `notices` in the
-metadata payload continues to carry parameter-substitution messages, which *are*
-known at metadata time.
+tiles that failed to load and renders the notice itself. Parameter substitution
+is a separate mechanism that produces a similar-looking banner — it is known
+before the metadata call and travels through the `index` redirect's `?notice=`
+([ADR 19](0019-validation-errors-carry-a-usable-payload.md)), not through this
+payload.
 
 ## Consequences
 

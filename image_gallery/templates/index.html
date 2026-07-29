@@ -1,5 +1,39 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% comment %}
+The shell. It carries no image data — the grid is built in the browser
+(docs/adr/0002-client-side-rendering.md) from the bounds published below, and
+the ids are derived rather than fetched
+(docs/adr/0020-ids-are-derived-in-the-browser.md).
+
+`data-testid` attributes are the contract the browser-driven suite binds to —
+see the list in tests/e2e/test_gallery_steps.py. They are never styling classes,
+so restyling cannot break a test.
+{% endcomment %}
 
 {% block content %}
-<p data-testid="status">Baseline is running. Gallery features are not implemented yet.</p>
+  {% comment %}
+  The notice banner is created by the client only when there is something to
+  say — see gallery.js. It is deliberately not rendered here: the scenario
+  "no validation message is shown" asserts the element is *absent*, not merely
+  hidden, so an always-present empty <p> would fail it.
+
+  Grid structure and attribute names follow docs/ui/design-system.md § Image
+  grid. `data-size` selects the cell floor; `data-state` drives the loading
+  treatment. Both are set here rather than by JS so the grid has its final
+  geometry before any script runs.
+  {% endcomment %}
+  <ul
+    data-testid="gallery"
+    id="gallery"
+    class="gallery"
+    data-size="{{ size }}"
+    data-state="ready"
+    data-page="{{ page }}"
+    data-count="{{ count }}"
+    data-catalogue-size="{{ catalogue_size }}"
+  ></ul>
+
+  <script src="{% static 'js/gallery.js' %}" defer></script>
 {% endblock %}

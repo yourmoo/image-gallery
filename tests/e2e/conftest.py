@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import time
 import urllib.error
@@ -312,25 +311,6 @@ def scenario_state() -> dict:
 # --------------------------------------------------------------------------
 
 
-def count_api_calls(state: dict) -> None:
-    """Start counting browser -> Django calls for a page's image metadata.
-
-    Registered once per scenario, before the first navigation. This is the
-    browser-visible half of F2.7 -- one metadata call per page view. The other
-    half, that the call reaches no further, is answered by the fake's log.
-    """
-    if state.get("_counting"):
-        return
-    state["_counting"] = True
-    state["api_calls"] = 0
-
-    def _on_request(request) -> None:
-        if "/api/images" in request.url and not re.search(r"/api/images/\d", request.url):
-            state["api_calls"] = state.get("api_calls", 0) + 1
-
-    state["page"].on("request", _on_request)
-
-
 def query_string(state: dict) -> str:
     """The query accumulated by the 'Given I am viewing ...' steps."""
     params = state.get("params", {})
@@ -341,7 +321,6 @@ def query_string(state: dict) -> str:
 
 def goto(state: dict, path: str) -> None:
     """Navigate, remembering the response so status can be asserted later."""
-    count_api_calls(state)
     state["response"] = state["page"].goto(f"{state['base_url']}{path}")
 
 

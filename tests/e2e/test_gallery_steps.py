@@ -128,21 +128,6 @@ def choose_count(count: int, scenario_state):
 # --------------------------------------------------------------------------
 
 
-@then(parsers.parse("{count:d} gallery data request is made"))
-@then(parsers.parse("{count:d} gallery data requests are made"))
-def gallery_data_requests(count: int, scenario_state):
-    """The metadata call the page makes to Django, counted in the browser.
-
-    Distinct from upstream requests: this is browser -> Django, which the
-    browser can see, so it is observed with a Playwright route rather than the
-    fake's log.
-    """
-    assert scenario_state.get("api_calls", 0) == count, (
-        f"expected {count} gallery data request(s), "
-        f"saw {scenario_state.get('api_calls', 0)}"
-    )
-
-
 @then("no upstream image requests are made")
 def no_upstream_requests(scenario_state):
     actual = scenario_state["upstream"].image_requests

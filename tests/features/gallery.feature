@@ -26,14 +26,14 @@ Feature: Image gallery and pagination
     When I open page 2 of the gallery
     Then the page shows images 11 to 20
 
-  # F2.7 — one browser call for the page's metadata, then one image request
-  # per tile. Images are fetched when the browser asks for them, not while
-  # the metadata call is being served. See docs/adr/0017-image-fetch-timing.md.
+  # F2.7 — the page is composed of one upstream call per tile, and those calls
+  # happen when the browser requests each image rather than while the document
+  # is being served. See docs/adr/0017-image-fetch-timing.md and
+  # docs/adr/0020-ids-are-derived-in-the-browser.md.
   @F2_7 @stage1
-  Scenario: The page metadata is one call that reaches no further
+  Scenario: Rendering the grid reaches no further than this application
     When I open the gallery
-    Then 1 gallery data request is made
-    And no upstream image requests are made
+    Then no upstream image requests are made
 
   @F2_7 @F1_2 @stage2
   Scenario: A page is composed from one upstream call per image

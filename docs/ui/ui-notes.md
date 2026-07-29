@@ -27,8 +27,16 @@ From the architecture:
 - **Django is an image proxy.** Every `<img src>` points at Django, never at
   picsum.dev. No provider URL appears in any payload or rendered markup.
 - **No database**, so no sessions — the validation notice arrives as a query
-  parameter (`?notice=...`) on first load, and from the API's error payload
-  thereafter.
+  parameter (`?notice=...`), set by the `index` redirect on first load and by
+  `history.replaceState` for in-app corrections. It never comes from the API:
+  the client builds requests from its own allow-listed controls, so a `400`
+  means the client has a bug
+  ([ADR 19](../adr/0019-validation-errors-carry-a-usable-payload.md)).
+- **The grid is derived, not fetched.** There is no page-metadata call: the
+  shell publishes the catalogue size and page size, and the client computes the
+  id range for the current page
+  ([ADR 20](../adr/0020-ids-are-derived-in-the-browser.md)). Changing the count
+  is therefore instant — no round trip is needed to know which tiles to draw.
 - **Loading state is explicit.** Because the client knows when a fetch is in
   flight, the indicator covers pagination and filter changes, not only the
   initial load.
@@ -218,10 +226,16 @@ the framing:
   sets at runtime (`data-active`, `data-loaded`, `data-size`, `src`, `href`).
 - **The controls block is the one that actively misleads.** It is a
   `<form method="get" action="…">` with an Apply button. Under CSR there is no
-  form submit — controls fire a `fetch` and call `history.pushState`. Whether an
-  Apply button exists at all is an open design question: instant-apply on change
-  is the more usual CSR pattern, but it fires a request per keystroke on the
-  blur field. **Decide this and write it down.**
+  form submit — controls fire a `fetch` and call `history.pushState`.
+
+  **Decided 2026-07-29: instant apply, no Apply button.** Each control fires on
+  `change`; blur debounces at 250 ms so dragging the slider does not fire a
+  request per step. This is the usual CSR pattern, and it is what the existing
+  step definition already assumes — `choose_count` calls `select_option` and
+  waits for the network to settle, with no button to click
+  ([tests/e2e/test_gallery_steps.py](../../tests/e2e/test_gallery_steps.py)).
+  A form element may still wrap the controls for grouping and keyboard
+  semantics, but its submit event is prevented.
 - Pagination `{% if %}` guards become "JS renders no element at all" — the
   Gherkin asserts *absence*, not a disabled state.
 
