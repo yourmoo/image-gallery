@@ -1,8 +1,11 @@
 """Validation is pure, so these tests need no Django and no request.
 
-The rules here are the ones both entry points share — the shell view's redirect
-and the API's 400 — so a gap in this file is a gap in both
+The rules here are shared by both entry points — the shell view's redirect and
+the image endpoints' 400 — so a gap in this file is a gap in both
 (docs/adr/0019-validation-errors-carry-a-usable-payload.md).
+
+Only `page` and `count` are validated at stage 1. `size`, `grayscale`, and
+`blur` arrive with the stages that render them.
 """
 
 import pytest
@@ -40,20 +43,21 @@ def test_allow_listed_counts_are_accepted(raw, expected):
     assert rejection is None
 
 
-@pytest.mark.parametrize("raw", ["7", "0", "-10", "abc", "10.5", "1e1"])
+@pytest.mark.parametrize("raw", ["7", "0", "-10", "abc", "10.5", "1e1", "  "])
 def test_a_count_outside_the_allow_list_falls_back_and_is_reported(raw):
     """Includes forms that parse as numbers but are not offered.
 
     `10.5` and `1e1` matter: both are meaningful to a lenient parser and
-    neither is on the allow-list, so accepting either would let a request
-    through that the UI could never produce.
+    neither is on the allow-list, so accepting either would let through a
+    request the UI could never produce.
     """
     count, rejection = validate_count(raw, allowed=PAGE_SIZES, default=10)
 
     assert count == 10
-    assert rejection is not None
-    assert rejection.parameter == "count"
-    assert rejection.value == raw
+    if raw.strip():
+        assert rejection is not None
+        assert rejection.parameter == "count"
+        assert rejection.value == raw
 
 
 def test_a_rejected_count_names_what_is_accepted():
@@ -61,6 +65,14 @@ def test_a_rejected_count_names_what_is_accepted():
     _, rejection = validate_count("7", allowed=PAGE_SIZES, default=10)
 
     assert rejection.accepted == "10, 20, 50"
+
+
+def test_the_allow_list_is_whatever_it_is_configured_to_be():
+    """Not hardcoded to 10/20/50 — the list is deployment configuration."""
+    count, rejection = validate_count("25", allowed=(25, 75), default=25)
+
+    assert count == 25
+    assert rejection is None
 
 
 # --- total_pages ---------------------------------------------------------
@@ -86,6 +98,11 @@ def test_an_empty_catalogue_still_has_one_page():
     assert total_pages(0, 10) == 1
 
 
+def test_a_nonsensical_count_does_not_divide_by_zero():
+    """Defensive: validation should have rejected it, but this must not raise."""
+    assert total_pages(100, 0) == 1
+
+
 # --- page ----------------------------------------------------------------
 
 
@@ -105,9 +122,14 @@ def test_a_page_inside_the_catalogue_is_accepted(raw, expected):
     assert rejection is None
 
 
-@pytest.mark.parametrize("raw", ["abc", "0", "-5", "11", "999", "1.5"])
+@pytest.mark.parametrize("raw", ["abc", "0", "-5", "11", "999", "1.5", "٣"])
 def test_a_page_outside_the_catalogue_recovers_to_page_one(raw):
-    """Every invalid form recovers identically — brief line 48."""
+    """Every invalid form recovers identically — brief line 48.
+
+    The Arabic-Indic digit is deliberate: `int()` accepts it, so a naive
+    implementation would silently accept a page number nothing in the UI can
+    produce and no other part of the system would round-trip.
+    """
     page, rejection = validate_page(raw, last_page=10)
 
     assert page == 1
@@ -191,9 +213,20 @@ def test_both_parameters_can_be_rejected_at_once():
 
 
 def test_nothing_supplied_is_valid():
-    result = validate(
-        {}, page_sizes=PAGE_SIZES, default_count=10, catalogue_size=100
-    )
+    result = validate({}, page_sizes=PAGE_SIZES, default_count=10, catalogue_size=100)
 
     assert result.is_valid
     assert (result.page, result.count) == (1, 10)
+
+
+def test_a_rejection_serialises_to_the_documented_error_shape():
+    """docs/api-contract.md's `errors` array carries these three fields."""
+    result = validate(
+        {"count": "7"}, page_sizes=PAGE_SIZES, default_count=10, catalogue_size=100
+    )
+
+    assert result.rejections[0].as_dict() == {
+        "parameter": "count",
+        "value": "7",
+        "accepted": "10, 20, 50",
+    }

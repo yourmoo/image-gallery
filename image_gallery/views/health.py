@@ -12,7 +12,7 @@ class HealthView(View):
     check the upstream image provider: the application is live during an
     upstream outage because it degrades to placeholders rather than failing
     (docs/adr/0012-resilience-strategy.md), and a health check that failed
-    there would have an orchestrator restart a working container.
+    there would have an orchestrator restart a container that is working.
     """
 
     http_method_names = ["get", "head", "options"]

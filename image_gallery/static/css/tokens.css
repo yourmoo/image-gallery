@@ -4,80 +4,105 @@
  * type, radii, and the two gallery-specific scales (image sizes and grid
  * geometry). Components in app.css reference these and never hardcode a value.
  *
- * The four properties the baseline already shipped — --bg, --fg, --muted,
- * --border — are preserved by name so existing templates keep working.
+ * Reconciled with docs/ui/design-system.md on 2026-07-29. That document is the
+ * intent; this file had diverged from it on core values — palette, spacing
+ * scale, radii, and type sizes — and was missing the --warn family entirely,
+ * which the failed-tile state depends on. docs/ui/ui-notes.md § Handover listed
+ * that reconciliation as blocking. It is now done, and the two agree.
  *
- * Documented in docs/ui/design-system.md.
+ * The four properties the baseline shipped — --bg, --fg, --muted, --border —
+ * are preserved by name, as ui-notes required, so existing markup keeps working.
  */
 
 :root {
   color-scheme: light; /* light only — no dark override */
 
-  /* --- Colour: light --- */
-  --bg: #ffffff;
-  --surface: #f7f8f9;
+  /* --- Colour ---
+   * Nothing here is red: no state in this system is an unrecoverable error.
+   * The validation banner is cool (it reports what *you* asked for and fell
+   * back from); the degraded banner is warm (it reports what the *system* did
+   * when upstream was unavailable). Those must not look alike. */
+  --bg: #fdfdfc;
+  --surface: #f2f2ef;
   --surface-raised: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #5a5a5a;
-  --border: #d8d8d8;
-  --border-strong: #b4b4b4;
+  --fg: #1b1b19;
+  --muted: #6e6e68;
+  --border: #e2e2dd;
+  --border-strong: #d8d8d2;
 
-  --accent: #1f5fa8;
+  --accent: #3b6ea8;
   --accent-fg: #ffffff;
-  --accent-subtle: #e8f0fa;
+  --accent-subtle: #edf2f9;
+  --accent-ink: #2c5385;
 
-  /* Notices are informational, never alarming: the gallery renders beneath
-   * them. Warm rather than red, per docs/ui/ui-notes.md. */
-  --notice-bg: #fdf6e3;
-  --notice-fg: #6b5310;
-  --notice-border: #e3d08a;
+  /* Validation banner: cool, informational. The gallery renders beneath it. */
+  --notice-bg: #f5f8fc;
+  --notice-border: #dfe6f0;
+  --notice-fg: #2c5385;
 
-  /* Placeholder shown while a proxied image loads. */
-  --placeholder: #e9ebed;
+  /* Degraded / failed: warm, and deliberately distinct from both the notice
+   * banner and the loading placeholder. A failed tile must never read as a
+   * tile that is still loading. */
+  --warn: #b08442;
+  --warn-bg: #fcf8f0;
+  --warn-border: #eadfc8;
 
-  /* --- Spacing: 4px base, geometric --- */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
-  --space-7: 3rem;
+  /* Tile before its image loads. Two stops, so the placeholder can carry a
+   * 135° stripe rather than a flat fill — visibly "pending" rather than
+   * "empty". */
+  --placeholder: #f2f2ef;
+  --placeholder-alt: #eaeae6;
 
-  /* --- Type --- */
+  /* --- Spacing: 4, 8, 12, 16, 24, 32, 48, 56px --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 56px;
+
+  /* --- Type ---
+   * Nothing below 12px. --font-mono is for parameter values, identifiers, and
+   * token names, so numbers align and read as data — never for prose. */
   --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", monospace;
-  --text-sm: 0.8125rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --leading: 1.5;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 24px;
+  --text-xl: 44px;
+  --leading: 1.6;
   --leading-tight: 1.25;
 
   /* --- Shape --- */
-  --radius-sm: 3px;
-  --radius: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 6px;   /* fields, buttons, tiles */
+  --radius: 8px;      /* panels, cards, banners */
+  --radius-lg: 12px;  /* detail image */
+  --radius-pill: 999px;
   --border-width: 1px;
   --focus-width: 2px;
   --focus-offset: 2px;
 
   /* --- Elevation: restrained, one step only --- */
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.04);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 
-  /* --- Motion. Durations resolve to 0 under reduced-motion (below). --- */
+  /* --- Motion. Durations resolve to 0 under reduced-motion (below), so the
+   * fade honours the setting with no extra rules. The image fade and the grid
+   * dim are the only animations in the system. --- */
   --duration-fast: 120ms;
-  --duration: 200ms;
-  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --duration: 160ms;
+  --ease: ease-out;
 
   /* --- Layout --- */
   --measure: 70rem;
   --header-height: 3.5rem;
 
   /* --- Gallery: image render sizes ---
-   * The named sizes of F3.1. These are the CSS display dimensions; the proxy
-   * serves matching pixel dimensions. Kept as tokens so "large" means one
-   * thing across the grid, the detail view, and the docs. */
+   * The named sizes of F3.1. Custom WxH sizes (ADR 10) are not one of these
+   * three, so the grid falls back to --cell-medium and the served dimensions
+   * govern; these tokens name the common cases rather than every case. */
   --image-small: 200px;
   --image-medium: 400px;
   --image-large: 800px;
@@ -87,6 +112,16 @@
   --cell-small: 140px;
   --cell-medium: 200px;
   --cell-large: 280px;
+}
+
+/* Below 480px the cell floor drops: at 50 images on a phone, image dimensions
+ * matter more than column count. */
+@media (max-width: 480px) {
+  :root {
+    --cell-small: 110px;
+    --cell-medium: 110px;
+    --cell-large: 110px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

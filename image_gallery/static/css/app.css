@@ -227,8 +227,15 @@ main {
  * image fades in. Reserves layout, so the grid never reflows. */
 .tile__frame {
   aspect-ratio: 1 / 1;
-  background: var(--placeholder);
   display: block;
+  /* A 135° stripe rather than a flat fill, per docs/ui/design-system.md: the
+   * tile reads as "pending" instead of "empty", and cannot be mistaken for the
+   * warm treatment a failed tile carries. */
+  background: repeating-linear-gradient(
+    135deg,
+    var(--placeholder) 0 10px,
+    var(--placeholder-alt) 10px 20px
+  );
 }
 
 .tile__image {

@@ -7,9 +7,9 @@ package, which is what keeps it testable without Django or a request.
 
 Validation **returns** rejections rather than raising them. Both callers need
 the recovered value *and* the record of what was rejected: the shell view
-redirects to a corrected URL carrying a notice, and the API view reports the
-rejection as a 400. An exception would unwind past the fallback that both of
-them require (docs/adr/0019-validation-errors-carry-a-usable-payload.md).
+redirects to a corrected URL carrying a notice, and the image endpoints report
+the rejection as a 400. An exception would unwind past the fallback that both
+of them require (docs/adr/0019-validation-errors-carry-a-usable-payload.md).
 
 Only `page` and `count` are validated here today. `size`, `grayscale`, and
 `blur` arrive with the stages that render them; adding them now would mean
@@ -37,7 +37,12 @@ class Rejection:
     accepted: str
 
     def as_dict(self) -> dict:
-        """The shape the API's `errors` array carries."""
+        """The shape the API's `errors` array carries.
+
+        `applied` is deliberately absent: it is what the *browser* client needs
+        in order to explain itself, while a programmatic caller is told what
+        would be accepted and left to choose.
+        """
         return {
             "parameter": self.parameter,
             "value": self.value,
@@ -48,8 +53,8 @@ class Rejection:
     def notice(self) -> str:
         """The token carried in `?notice=` across the shell view's redirect.
 
-        A token rather than a sentence: the wording belongs to the UI, and a
-        prose message in a URL would be both unwieldy and untranslatable.
+        A token rather than a sentence: the wording belongs to the UI, and
+        prose in a URL would be both unwieldy and untranslatable.
         """
         return f"invalid_{self.parameter}"
 
@@ -68,31 +73,45 @@ class Validated:
 
 
 def _as_int(raw: str | None) -> int | None:
-    """Parse an integer, treating anything unparseable as absent.
+    """Parse an ASCII decimal integer, treating anything else as absent.
 
-    `page=abc`, `page=`, and a missing `page` are the same case for the caller:
+    Deliberately stricter than `int()`, which accepts Unicode decimal digits —
+    `int("٣")` is 3. Those round-trip through no other part of the system, and
+    no control in the UI can produce one, so accepting them would let a request
+    through that only a hand-edited URL could make.
+
+    A missing value and an unparseable one are the same case for the caller:
     there is no usable value, so the default applies. They differ only in
-    whether that substitution is worth reporting, which is decided above.
+    whether the substitution is worth reporting, which is decided above.
     """
     if raw is None:
         return None
-    try:
-        return int(raw.strip())
-    except (ValueError, AttributeError):
+
+    text = str(raw).strip()
+    if not text:
         return None
 
+    sign, digits = ("-", text[1:]) if text.startswith("-") else ("", text)
+    if not digits.isascii() or not digits.isdigit():
+        return None
 
-def validate_count(raw: str | None, allowed: tuple[int, ...], default: int) -> tuple[int, Rejection | None]:
+    return int(sign + digits)
+
+
+def validate_count(
+    raw: str | None, allowed: tuple[int, ...], default: int
+) -> tuple[int, Rejection | None]:
     """Resolve the per-page image count against its allow-list.
 
     An absent parameter is not a rejection — it is the default being used as
-    intended. Only a value that was supplied and cannot be honoured is reported.
+    intended. Only a value that was supplied and cannot be honoured is
+    reported, so a first visit carries no notice.
     """
     if raw is None or not str(raw).strip():
         return default, None
 
     parsed = _as_int(raw)
-    if parsed in allowed:
+    if parsed is not None and parsed in allowed:
         return parsed, None
 
     return default, Rejection(
@@ -107,7 +126,9 @@ def total_pages(catalogue_size: int, count: int) -> int:
     """How many pages a catalogue of this size yields at this page size.
 
     At least 1: an empty catalogue still has a page 1 to render, and returning
-    0 would make every page number invalid including the default.
+    0 would make every page number invalid including the default. A count of 0
+    is guarded rather than allowed to divide — validation should have rejected
+    it, but this must not raise if something slips through.
     """
     if count <= 0:
         return 1
