@@ -78,6 +78,15 @@ set — no scenario needs a control not listed here.
 | Pagination | previous / next, page indicator | F2.1, F2.3 |
 | Image link | each grid image opens its detail page | F4.1 |
 | Back to gallery | detail → gallery, preserving page and filters | F4.1 |
+| Detail size | small, medium, large — **large is the default**, not a rule | F4.4 |
+| Detail grayscale | on / off, inherited from the gallery | F4.3, F4.4 |
+| Detail blur | integer 0-10, inherited from the gallery | F4.3, F4.4 |
+
+The detail page has its own copies of size, grayscale, and blur. They are not
+the gallery's: a choice made there stays there, so opening one image at `small`
+does not re-render the grid on return
+([ADR 7](../adr/0007-detail-view-size.md) § Amendment). Its size arrives as
+`?detail_size=`, distinct from the gallery's `?size=` for exactly that reason.
 
 Size, grayscale, blur, and count belong to **one form**. They are read together
 on submit, so changing two at once is a single navigation. Blur and grayscale
@@ -141,8 +150,14 @@ Set `width`/`height` and use `loading="lazy"` below the fold.
 **A failed tile must not look like a loading tile.** The design system carries
 `--warn` tokens for exactly this distinction.
 
-**Detail page parameters panel** (F4.4) — shows identifier, size, grayscale
-state, and blur value. It reports what was *actually used*, which means size
+**Detail page parameters panel** (F4.4) — **reports and sets**. Each row pairs
+the resolved value with the control that changes it, so the two cannot
+disagree. Shows identifier, size, grayscale state, and blur value.
+
+It is a real `<form>` with a submit button, because this page is
+server-rendered and must work without JavaScript. `detail-panel.js` then hides
+the button and makes each control apply on change, so the page matches the
+gallery's instant-apply behaviour when script is available. It reports what was *actually used*, which means size
 reads `large` even when the gallery was showing `small`:
 
     Given I am viewing the gallery at the "small" size

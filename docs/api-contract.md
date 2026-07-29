@@ -51,9 +51,18 @@ A **page**, not bytes — `/img/<id>` serves those. Two routes because a user
 links to and bookmarks the first while an `<img>` element fetches the second,
 and one path cannot be both.
 
-Accepts the same parameters as `index`, and applies one rule of its own: **size
-is forced up, filters carry over untouched**
+Accepts the same parameters as `index`, plus `detail_size`, and applies one
+rule of its own on arrival: **size is forced up, filters carry over untouched**
 ([ADR 7](adr/0007-detail-view-size.md)).
+
+| Parameter | Meaning |
+| --- | --- |
+| `size` | The **gallery's** size. Governs the back link, and sets the arrival default via the rule below. |
+| `detail_size` | A size chosen **on this page**. Overrides the default, including downwards. |
+
+Two parameters rather than one, so a choice made here stays here: opening a
+single image at `small` must not silently re-render the whole grid on return
+([ADR 7](adr/0007-detail-view-size.md) § Amendment).
 
 | Gallery was showing | The detail page renders at |
 | --- | --- |
@@ -65,7 +74,8 @@ is forced up, filters carry over untouched**
 The parameters panel reports the **resolved** values, so `size` reads `large`
 even when the gallery was showing `small`. That is the point of it: this page
 silently changes one of the user's parameters, and the panel is where they find
-out (F4.4).
+out (F4.4). It is also the control surface — each value is shown in the widget
+that sets it, so report and control cannot disagree.
 
 Like `index`, this is a document boundary — an invalid parameter is corrected
 by a redirect rather than refused. An id outside the catalogue is the exception

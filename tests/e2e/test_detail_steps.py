@@ -31,7 +31,7 @@ import pytest
 from playwright.sync_api import expect
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from conftest import goto, query_string, tiles, wait_for_images
+from conftest import empty_image_cache, goto, query_string, tiles, wait_for_images
 
 pytestmark = pytest.mark.e2e
 
@@ -97,13 +97,83 @@ def select_third_image(scenario_state):
     _select_nth_image(scenario_state, 3)
 
 
+def _drive_detail_control(scenario_state) -> None:
+    """Forget what loading the detail page fetched, before touching a control.
+
+    Same reasoning as the gallery's controls: opening the page fetches one
+    image at the *current* parameters, and those requests are not evidence
+    about the parameter under test. The cache is emptied too, because a
+    variation already cached is served without the fake being consulted, which
+    would leave the assertion with nothing to read.
+    """
+    empty_image_cache()
+    scenario_state["upstream"].reset()
+
+
+@when(parsers.parse('I choose the "{size}" size on the detail page'))
+def choose_size_on_detail(size: str, scenario_state):
+    """Drive the real control.
+
+    Setting ?size= here would let a missing or broken control still pass, and
+    the control is the whole point of the amendment to ADR 7 — the page opens
+    at large and the user may then choose otherwise, including smaller.
+    """
+    _drive_detail_control(scenario_state)
+    scenario_state["page"].get_by_test_id("size-control").select_option(size)
+    wait_for_images(scenario_state)
+
+
+@when("I turn grayscale on from the detail page")
+def turn_grayscale_on_detail(scenario_state):
+    _drive_detail_control(scenario_state)
+    scenario_state["page"].get_by_test_id("grayscale-control").check()
+    wait_for_images(scenario_state)
+
+
+@when(parsers.parse("I set the blur to {blur:d} on the detail page"))
+def set_blur_on_detail(blur: int, scenario_state):
+    _drive_detail_control(scenario_state)
+    control = scenario_state["page"].get_by_test_id("blur-control")
+    control.fill(str(blur))
+    control.dispatch_event("change")
+    wait_for_images(scenario_state)
+
+
+@then(parsers.re(r"the page offers a control for (?:the )?(?P<parameter>\w+)"))
+def offers_control(parameter: str, scenario_state):
+    """F4.4 as amended: the panel reports *and* sets.
+
+    Matched with `parsers.re` so "the size" and "grayscale" both bind — two
+    `parsers.parse` variants would each match the other's phrasing, and the
+    optional article ended up inside the captured value.
+
+    Asserts the control is visible rather than merely present: a hidden input
+    would satisfy a DOM lookup while being useless to a user.
+    """
+    testid = {"size": "size-control", "grayscale": "grayscale-control",
+              "blur": "blur-control"}[parameter]
+    expect(scenario_state["page"].get_by_test_id(testid)).to_be_visible()
+
+
 @when("I follow the link back to the gallery")
 def follow_back_link(scenario_state):
     """F4.1 — returning must restore the page and the filters.
 
     Clicking the real link rather than navigating by URL: the whole point is
     that the application built a link carrying that state.
+
+    The log is cleared first so what follows describes the *gallery*. Without
+    that, a scenario that chose `small` on the detail page then asserts against
+    both the 200x200 detail image and the 800x800 tiles it returned to, and
+    reports two sizes where the question was only ever about one.
+
+    The cache is emptied with it: a tile already cached is served without the
+    fake being consulted, so clearing only the log would leave the assertion
+    with nothing at all to read.
     """
+    empty_image_cache()
+    scenario_state["upstream"].reset()
+
     page = scenario_state["page"]
     page.get_by_test_id("back-to-gallery").click()
     wait_for_images(scenario_state)

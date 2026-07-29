@@ -1,0 +1,40 @@
+/*
+ * The detail page's parameters panel, made instant.
+ *
+ * The panel is a real `<form>` with a submit button, because this page is
+ * server-rendered and has to work with no script at all. This file is the
+ * progressive enhancement: when it runs, changing a control submits the form
+ * immediately and the button becomes redundant, so the detail page behaves
+ * like the gallery rather than being the one screen that needs a button
+ * (docs/ui/ui-notes.md — controls apply instantly, no Apply).
+ *
+ * This file is the **pure half** — which controls self-apply, and on what
+ * event. It touches no DOM, so it can be unit-tested without a browser
+ * (tests/unit/js/detail.test.js). The wiring lives in detail-panel.js, which
+ * imports it; that split is the same one derive.js and gallery.js use, and it
+ * exists because a module that reads `document` at import time cannot be
+ * loaded by a test runner at all.
+ */
+
+/* Whether a control should apply on its own, or wait for the button.
+ *
+ * Selects, checkboxes, and ranges each represent a completed choice the moment
+ * they change. A text field does not — it would navigate on every keystroke —
+ * so anything else falls back to the submit button, which is why the button
+ * stays in the markup rather than being removed once script is available.
+ */
+export function appliesImmediately(type) {
+  return type === "select-one" || type === "checkbox" || type === "range";
+}
+
+/* The event that means "the user has finished choosing".
+ *
+ * `change` throughout, including for the range. A range also fires `input`
+ * continuously while dragging, and submitting on that would mean eleven
+ * navigations for one drag of the blur slider. `change` fires once, when the
+ * drag ends — the same reasoning the gallery's blur control uses, and why
+ * neither needs a debounce timer.
+ */
+export function submitEvent(type) {
+  return appliesImmediately(type) ? "change" : null;
+}

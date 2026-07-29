@@ -169,6 +169,91 @@ def test_the_panel_reports_both_filters(client):
     assert 'data-testid="param-blur"' in body
 
 
+# --- the panel as a control surface (ADR 7, amended) ---------------------
+
+
+def test_the_panel_offers_a_control_for_every_value_it_reports(client):
+    """F4.4 as amended: the panel reports *and* sets.
+
+    A value shown in a control the user can operate is more discoverable than
+    the same value shown as static text — changing it demonstrates what it
+    means. That is why the amendment strengthens the honesty burden ADR 7
+    placed on this panel rather than weakening it.
+    """
+    body = client.get(url_for(7)).content.decode()
+
+    assert 'data-testid="size-control"' in body
+    assert 'data-testid="grayscale-control"' in body
+    assert 'data-testid="blur-control"' in body
+
+
+def test_the_size_control_offers_every_named_size_including_smaller_ones(client):
+    """The page opens at `large`, but the user may choose down from there.
+
+    That is the amendment: brief line 71 is satisfied by what the application
+    does on arrival, not by refusing the user a smaller image afterwards.
+    """
+    body = client.get(url_for(7)).content.decode()
+
+    for name in ("small", "medium", "large"):
+        assert f'value="{name}"' in body
+
+
+def test_a_size_chosen_here_is_honoured_rather_than_forced_up(client):
+    """The distinction the amendment turns on.
+
+    Arriving from a `small` gallery still gives `large` — that is the default.
+    Asking for `small` *on this page* is a choice, and is obeyed.
+    """
+    body = client.get(url_for(7), {"detail_size": "small"}).content.decode()
+
+    assert "size=small" in body
+
+
+def test_the_panel_reports_the_size_chosen_here(client):
+    """Report and control must agree after a change, not only on arrival."""
+    body = client.get(url_for(7), {"detail_size": "small"}).content.decode()
+
+    assert 'data-testid="param-size"' in body
+    assert ">small<" in body.replace(" ", "").replace("\n", "")
+
+
+def test_arriving_without_a_choice_still_opens_large(client):
+    """The default, and every reason for it, is unchanged."""
+    body = client.get(url_for(7), {"size": "small"}).content.decode()
+
+    assert "size=large" in body
+
+
+def test_a_size_chosen_here_does_not_reach_the_back_link(client):
+    """A choice made on this page belongs to this page.
+
+    Otherwise opening one image at `small` would silently re-render the whole
+    grid on return — a change the user never asked for.
+
+    Asserts on the back link's own href rather than on the page as a whole:
+    `small` legitimately appears elsewhere, as an option in the size control.
+    """
+    import re
+
+    body = client.get(
+        url_for(7), {"size": "large", "detail_size": "small"}
+    ).content.decode()
+
+    back = re.search(r'data-testid="back-to-gallery" href="([^"]+)"', body)
+    assert back, "no back link found"
+
+    assert "size=large" in back.group(1), "the back link keeps the gallery's size"
+    assert "small" not in back.group(1), "and not the one chosen on this page"
+
+
+def test_an_invalid_choice_here_recovers_like_any_other(client):
+    response = client.get(url_for(7), {"detail_size": "enormous"})
+
+    assert response.status_code == 302
+    assert "notice=invalid_size" in response["Location"]
+
+
 # --- the way back --------------------------------------------------------
 
 

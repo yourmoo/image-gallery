@@ -97,15 +97,23 @@ COLD_CACHE_SCENARIOS = {
     # have already cached most of the catalogue at most of the sizes.
     "test_opening_an_image_from_the_gallery",
     "test_the_detail_view_shows_a_larger_image",
-    "test_the_detail_view_is_large_whatever_size_the_gallery_used",
-    "test_a_custom_size_larger_than_large_is_kept_on_the_detail_page",
-    "test_a_custom_size_smaller_than_large_is_replaced_by_large",
+    "test_the_detail_view_opens_large_whatever_size_the_gallery_used",
+    "test_a_custom_size_larger_than_large_is_kept_when_the_page_opens",
+    "test_a_custom_size_smaller_than_large_is_replaced_by_large_on_arrival",
     "test_active_filters_carry_over_to_the_detail_view",
     "test_an_unfiltered_gallery_gives_an_unfiltered_detail_view",
     "test_the_detail_page_lists_the_parameters_used",
     "test_the_parameters_panel_reports_defaults_when_nothing_is_chosen",
     "test_returning_to_the_gallery_keeps_my_place_and_my_filters",
     "test_an_invalid_filter_on_the_detail_page_falls_back_and_says_so",
+    # The detail-page controls, same reason: each asserts on the dimensions and
+    # filters the changed image was *fetched* at, and the earlier scenarios
+    # have already cached most of the catalogue at most of the variations.
+    "test_choosing_a_size_on_the_detail_page",
+    "test_turning_grayscale_on_from_the_detail_page",
+    "test_changing_the_blur_from_the_detail_page",
+    "test_the_panel_reports_a_value_the_user_chose_here_not_the_one_they_arrived_with",
+    "test_a_size_chosen_on_the_detail_page_does_not_follow_me_back_to_the_gallery",
 }
 
 

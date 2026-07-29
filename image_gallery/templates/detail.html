@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Image {{ image_id }}{% endblock %}
 {% block heading %}Image {{ image_id }}{% endblock %}
@@ -29,18 +30,62 @@ panel is where they find out. That is the honesty burden the ADR names.
     <img class="detail__image" data-testid="detail-image"
          src="{{ image_url }}" alt="Image {{ image_id }}">
 
-    <dl class="params" data-testid="params">
-      <dt>Identifier</dt>
-      <dd data-testid="param-id">{{ image_id }}</dd>
+    {% comment %}
+    The panel reports and sets. Each row pairs the resolved value with the
+    control that changes it, so the two cannot disagree — the value shown is
+    the value the control holds (docs/adr/0007-detail-view-size.md § Amendment).
 
-      <dt>Size</dt>
-      <dd data-testid="param-size">{{ size }}</dd>
+    A real form with a submit button, unlike the gallery's instant-apply
+    controls: this page is server-rendered and has no script, so there is no
+    change handler to fire a navigation. The button is what a form without
+    JavaScript needs, and it also lets several parameters change at once.
+    {% endcomment %}
+    <form class="params" data-testid="params" method="get" action="">
+      {% for name, value in carried %}
+        <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
 
-      <dt>Grayscale</dt>
-      <dd data-testid="param-grayscale">{{ grayscale|yesno:"on,off" }}</dd>
+      <dl class="params__list">
+        <dt>Identifier</dt>
+        <dd data-testid="param-id">{{ image_id }}</dd>
 
-      <dt>Blur</dt>
-      <dd data-testid="param-blur">{{ blur }}</dd>
-    </dl>
+        <dt><label for="detail_size">Size</label></dt>
+        <dd data-testid="param-size">
+          <select class="control__field" id="detail_size" name="detail_size"
+                  data-testid="size-control">
+            {% for name in named_sizes %}
+              <option value="{{ name }}"{% if name == size %} selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+            {% if size not in named_sizes %}
+              <option value="{{ size }}" selected>{{ size }}</option>
+            {% endif %}
+          </select>
+        </dd>
+
+        <dt><label for="grayscale">Grayscale</label></dt>
+        <dd data-testid="param-grayscale">
+          <input class="control__check" type="checkbox" id="grayscale" name="grayscale"
+                 value="1" data-testid="grayscale-control"{% if grayscale %} checked{% endif %}>
+          <span class="params__value">{{ grayscale|yesno:"on,off" }}</span>
+        </dd>
+
+        <dt><label for="blur">Blur</label></dt>
+        <dd data-testid="param-blur">
+          <input class="control__range" type="range" id="blur" name="blur"
+                 data-testid="blur-control"
+                 min="0" max="{{ max_blur }}" step="1" value="{{ blur }}">
+          <span class="params__value">{{ blur }}</span>
+        </dd>
+      </dl>
+
+      {% comment %}
+      The no-script fallback. detail.js hides it and makes each control apply
+      on change, so the page matches the gallery's instant-apply behaviour when
+      script is available and still works when it is not.
+      {% endcomment %}
+      <button class="button" type="submit" data-testid="apply">Apply</button>
+    </form>
   </div>
+
+  <script type="module" src="{% static 'js/detail-panel.js' %}"></script>
 {% endblock %}

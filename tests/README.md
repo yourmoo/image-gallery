@@ -555,6 +555,7 @@ before it — so they are a sequence, not a grouping.
 | 8 | Variation validation and persistence | Needs both notices (5) and variations (7) |
 | 9 | The detail view | Opened from the grid |
 | 10 | Filters and the parameters panel on detail | Needs variations carrying over |
+| 11 | The panel as a control surface | Needs the panel (10) before it can be made adjustable |
 
 `gallery.feature` comes first because it is the only feature depending on no
 other. `detail.feature` comes last: eight of its scenarios assert that filters
