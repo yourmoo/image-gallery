@@ -18,6 +18,7 @@
  */
 
 import {
+  activeFilters,
   imageIds,
   imageUrl,
   noticeMessages,
@@ -262,6 +263,42 @@ function applyControl(name, value, isDefault) {
   window.location.search = params.toString();
 }
 
+/* The chip list: what is currently filtered, each removable on its own.
+ *
+ * Rendered into the container the template leaves empty, rather than built by
+ * the server, because the same URL the grid is derived from is the only source
+ * it needs — and rebuilding it here keeps chip and control reading the same
+ * state (docs/ui/design-system.md § Controls).
+ */
+function renderChips() {
+  const list = document.querySelector('[data-testid="active-filters"]');
+  if (!list) return;
+
+  const chips = activeFilters(new URLSearchParams(window.location.search));
+  list.replaceChildren();
+
+  for (const chip of chips) {
+    const item = document.createElement("li");
+    item.className = "chip";
+    item.dataset.testid = "chip";
+    item.dataset.parameter = chip.parameter;
+    item.textContent = chip.label;
+
+    /* A real link, so the remove is a navigation like every other state
+     * change here — middle-click and copy-link keep working, and no script is
+     * needed to make it act. */
+    const remove = document.createElement("a");
+    remove.className = "chip__remove";
+    remove.dataset.testid = `chip-remove-${chip.parameter}`;
+    remove.href = chip.removeUrl;
+    remove.setAttribute("aria-label", `Remove ${chip.label}`);
+    remove.textContent = "×";
+
+    item.appendChild(remove);
+    list.appendChild(item);
+  }
+}
+
 function wireControls() {
   const size = document.querySelector('[data-testid="size-control"]');
   const grayscale = document.querySelector('[data-testid="grayscale-control"]');
@@ -322,5 +359,6 @@ if (grid) {
   for (const message of noticeMessages(tokens)) showNotice(message);
 
   render();
+  renderChips();
   wireControls();
 }

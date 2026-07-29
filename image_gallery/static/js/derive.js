@@ -115,6 +115,44 @@ export function imageUrl(template, id, variations) {
   return suffix ? `${path}?${suffix}` : path;
 }
 
+/* The active filters, as removable chips.
+ *
+ * A summary of what is currently applied, each with a link that clears just
+ * that one parameter (docs/ui/design-system.md § Controls). Only non-default
+ * values appear: a chip for every parameter would be a second, noisier copy of
+ * the controls bar rather than a summary of it.
+ *
+ * `page` and `count` are excluded because they are not filters — they change
+ * *which* images are shown, not how any image looks. Removing a filter also
+ * returns to page 1, since the page a user was on rarely survives a change to
+ * what is being paged through.
+ */
+const FILTERS = [
+  { parameter: "size", label: (v) => `size ${v}`, isDefault: (v) => v === "medium" },
+  { parameter: "grayscale", label: () => "grayscale on", isDefault: (v) => !v || v === "0" },
+  { parameter: "blur", label: (v) => `blur ${v}`, isDefault: (v) => !v || v === "0" },
+];
+
+export function activeFilters(params) {
+  return FILTERS.flatMap(({ parameter, label, isDefault }) => {
+    const value = params.get(parameter);
+    if (value === null || value === "" || isDefault(value)) return [];
+
+    const without = new URLSearchParams(params);
+    without.delete(parameter);
+    without.delete("page");
+    without.delete("notice");
+
+    const query = without.toString();
+    return [{
+      parameter,
+      value,
+      label: label(value),
+      removeUrl: query ? `?${query}` : "?",
+    }];
+  });
+}
+
 /* The wording behind each `?notice=` token.
  *
  * The URL carries a token so the address stays short and the phrasing stays a

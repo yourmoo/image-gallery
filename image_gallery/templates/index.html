@@ -93,6 +93,14 @@ so restyling cannot break a test.
         {% endfor %}
       </select>
     </div>
+
+    {% comment %}
+    Active filters, summarised as removable chips
+    (docs/ui/design-system.md § Controls). Filled by gallery.js from the URL —
+    left empty here because the same URL the grid derives from is the only
+    source it needs, so chip and control cannot report different state.
+    {% endcomment %}
+    <ul class="chips" data-testid="active-filters"></ul>
   </div>
 
   <ul

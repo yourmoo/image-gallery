@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  activeFilters,
   imageIds,
   imageUrl,
   noticeMessages,
@@ -218,6 +219,60 @@ describe("pagination", () => {
 
   it("reports the position for the status text", () => {
     assert.equal(pagination(4, 7).status, "Page 4 of 7");
+  });
+});
+
+describe("activeFilters", () => {
+  // Non-default filters summarise as chips, each removable on its own
+  // (docs/ui/design-system.md § Controls). Defaults are not chips: a chip for
+  // every parameter would be a second, noisier copy of the controls bar.
+  it("gives nothing when everything is at its default", () => {
+    assert.deepEqual(activeFilters(new URLSearchParams()), []);
+  });
+
+  it("names a non-default size", () => {
+    const [chip] = activeFilters(new URLSearchParams("size=large"));
+
+    assert.equal(chip.label, "size large");
+    assert.equal(chip.parameter, "size");
+  });
+
+  it("says what grayscale means rather than repeating the parameter", () => {
+    const [chip] = activeFilters(new URLSearchParams("grayscale=1"));
+
+    assert.equal(chip.label, "grayscale on");
+  });
+
+  it("names a non-zero blur", () => {
+    const [chip] = activeFilters(new URLSearchParams("blur=4"));
+
+    assert.equal(chip.label, "blur 4");
+  });
+
+  it("lists several at once, because filters combine", () => {
+    const chips = activeFilters(new URLSearchParams("size=small&grayscale=1&blur=2"));
+
+    assert.deepEqual(chips.map((c) => c.parameter), ["size", "grayscale", "blur"]);
+  });
+
+  it("ignores a parameter sitting at its default", () => {
+    // `blur=0` and `size=medium` are what you get without asking, so a chip
+    // would report a filter the user never applied.
+    assert.deepEqual(activeFilters(new URLSearchParams("size=medium&blur=0")), []);
+  });
+
+  it("ignores page and count, which are not filters", () => {
+    // They change *which* images are shown, not how any image looks.
+    assert.deepEqual(activeFilters(new URLSearchParams("page=3&count=50")), []);
+  });
+
+  it("gives each chip a url that clears only its own parameter", () => {
+    const chips = activeFilters(new URLSearchParams("size=large&grayscale=1&page=2"));
+    const size = chips.find((c) => c.parameter === "size");
+
+    assert.ok(!size.removeUrl.includes("size="), size.removeUrl);
+    assert.ok(size.removeUrl.includes("grayscale=1"), "the others survive");
+    assert.ok(!size.removeUrl.includes("page="), "and paging restarts");
   });
 });
 

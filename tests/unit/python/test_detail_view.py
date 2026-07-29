@@ -254,6 +254,31 @@ def test_an_invalid_choice_here_recovers_like_any_other(client):
     assert "notice=invalid_size" in response["Location"]
 
 
+def test_an_empty_custom_size_does_not_override_the_selected_one(client):
+    """The form submits both size controls, and the empty one must not win.
+
+    The panel's select and its custom-size field both wrote to `detail_size`,
+    so choosing `small` submitted `detail_size=small&detail_size=` — and
+    reading a single value takes the last, which was the empty field. The
+    select appeared to do nothing at all.
+    """
+    body = client.get(
+        url_for(7), {"detail_size": ["small", ""]}
+    ).content.decode()
+
+    assert "size=small" in body, "the chosen size must survive an empty field"
+
+
+def test_a_custom_size_wins_over_the_select(client):
+    """When both carry a value, the field is the more specific intent — it is
+    the one the user typed."""
+    body = client.get(
+        url_for(7), {"detail_size": "large", "custom_detail_size": "300x300"}
+    ).content.decode()
+
+    assert "size=300x300" in body
+
+
 # --- the way back --------------------------------------------------------
 
 

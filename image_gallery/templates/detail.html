@@ -52,7 +52,7 @@ panel is where they find out. That is the honesty burden the ADR names.
         <dt><label for="detail_size">Size</label></dt>
         <dd data-testid="param-size">
           <select class="control__field" id="detail_size" name="detail_size"
-                  data-testid="size-control"{% if custom_size %} disabled{% endif %}>
+                  data-testid="size-control">
             {% for name in named_sizes %}
               <option value="{{ name }}"{% if name == size %} selected{% endif %}>{{ name }}</option>
             {% endfor %}
@@ -67,13 +67,18 @@ panel is where they find out. That is the honesty burden the ADR names.
 
         {% comment %}
         The custom size gets its own field for the same reason the gallery's
-        does: WxH cannot be enumerated. Naming it `detail_size` keeps a choice
-        made here from following the user back to the grid.
+        does: WxH cannot be enumerated.
+
+        Its own parameter name, too. Both controls wrote to `detail_size` at
+        first, so the form submitted it twice — `detail_size=small` from the
+        select and `detail_size=` from an empty field — and reading a single
+        value takes the last, which meant the empty field silently overrode
+        every choice.
         {% endcomment %}
         <dt><label for="custom_detail_size">Custom size</label></dt>
         <dd>
           <input class="control__field control__field--narrow" type="text"
-                 id="custom_detail_size" name="detail_size"
+                 id="custom_detail_size" name="custom_detail_size"
                  data-testid="custom-size-control"
                  value="{{ custom_size }}" placeholder="1200x900"
                  autocomplete="off" size="9">

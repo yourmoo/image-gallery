@@ -53,7 +53,7 @@ class ImageDetailView(View):
         # and its rejection joined to the rest, so a bad value recovers exactly
         # like any other rather than being silently ignored.
         _, detail_rejection = validate_size(
-            request.GET.get("detail_size") or None,
+            self._chosen_size(request),
             default="large",
             minimum=settings.GALLERY_MIN_DIMENSION,
             maximum=settings.GALLERY_MAX_DIMENSION,
@@ -65,6 +65,25 @@ class ImageDetailView(View):
             return HttpResponseRedirect(self._corrected_url(request, image_id, result))
 
         return render(request, "detail.html", self._context(request, image_id, result))
+
+    @staticmethod
+    def _chosen_size(request) -> str | None:
+        """The size the user picked on this page, from either control.
+
+        The field wins when it holds a value: it is the more specific intent,
+        being the one the user typed rather than picked from a list.
+
+        Both parameters are read with `getlist` and scanned for the first
+        non-empty value, because a browser submits *every* control in a form.
+        A `<select>` whose value is empty, or a field left blank, arrives as
+        `detail_size=` alongside the real choice — and `.get()` returns the
+        last, so an empty control silently overrode every selection.
+        """
+        for name in ("custom_detail_size", "detail_size"):
+            for value in request.GET.getlist(name):
+                if value.strip():
+                    return value
+        return None
 
     def _resolve_size(self, request, result) -> str:
         """The size to render at: the user's choice here, or the default.
@@ -81,7 +100,7 @@ class ImageDetailView(View):
         With no choice made, the ADR 7 default applies unchanged — arriving
         from a `small` gallery still gives `large`.
         """
-        chosen = request.GET.get("detail_size")
+        chosen = self._chosen_size(request)
         if chosen:
             resolved, rejection = validate_size(
                 chosen,
@@ -118,9 +137,10 @@ class ImageDetailView(View):
             "grayscale": result.grayscale,
             "blur": result.blur,
             "named_sizes": NAMED_SIZES,
-            # Empty unless a custom size is active. The select is disabled when
-            # it is, so the two controls cannot both submit `detail_size` — the
-            # field owns the parameter while it holds a value.
+            # Empty unless a custom size is active, so the field shows what is
+            # applied when the select cannot — a select displays only values it
+            # lists. The two controls carry different parameter names and
+            # `_chosen_size` prefers the field, so both may submit safely.
             "custom_size": "" if size in NAMED_SIZES else size,
             "max_blur": settings.GALLERY_MAX_BLUR,
             # The gallery's own state, carried through the form as hidden

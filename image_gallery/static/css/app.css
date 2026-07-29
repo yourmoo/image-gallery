@@ -235,6 +235,43 @@ main {
   font-weight: 600;
 }
 
+/* Filter chips: a summary of what is applied, each removable on its own.
+ * `--accent-subtle` on `--accent-ink`, pill-shaped, per the design system. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent-subtle);
+  color: var(--accent-ink);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.chip__remove {
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.6;
+  font-size: var(--text-base);
+  line-height: 1;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.chip__remove:hover {
+  opacity: 1;
+}
+
 .controls__actions {
   margin-left: auto;
   display: flex;
@@ -459,10 +496,37 @@ main {
   font-family: var(--font-mono);
 }
 
+/* Styled as a button, because it is the primary action on this page and bare
+ * underlined text does not read as one — it sat above the image looking like
+ * body prose.
+ *
+ * It stays an `<a href>`, and that is deliberate rather than an oversight.
+ * Going back is a navigation to a real URL, so middle-click, ctrl-click, and
+ * copy-link have to keep working; a `<button>` would break all three and would
+ * need script to do what an anchor does natively. This is the same reasoning
+ * the pagination links follow.
+ */
 .detail__back {
-  display: inline-block;
-  margin-bottom: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  padding: var(--space-2) var(--space-4);
+  min-height: 2.25rem;
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid var(--border-strong);
+  background: var(--surface-raised);
   color: var(--accent);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  transition: border-color var(--duration) var(--ease),
+    background var(--duration) var(--ease);
+}
+
+.detail__back:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  text-decoration: none;
 }
 
 /* --- Empty state (error-handling matrix: empty gallery results) --- */
@@ -488,7 +552,44 @@ main {
     flex: 1 1 8rem;
   }
 
-  .controls__actions {
+  /* Filter chips: a summary of what is applied, each removable on its own.
+ * `--accent-subtle` on `--accent-ink`, pill-shaped, per the design system. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent-subtle);
+  color: var(--accent-ink);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.chip__remove {
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.6;
+  font-size: var(--text-base);
+  line-height: 1;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.chip__remove:hover {
+  opacity: 1;
+}
+
+.controls__actions {
     margin-left: 0;
     flex: 1 1 100%;
   }
