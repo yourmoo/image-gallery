@@ -273,16 +273,63 @@ proxy endpoint.
 ## Specified but not yet implemented
 
 `gallery.feature`, `variations.feature`, and `detail.feature` describe the Core
-Requirements ahead of the code, following the brief's own language. They have
-**no step definitions yet**, so pytest-bdd does not collect them and they do not
-affect the counts above. Each becomes live when its steps are written alongside
-the feature it specifies.
+Requirements ahead of the code. **Their step definitions exist and run**, so all
+81 scenarios are collected — and nearly all of them fail, which is the point.
+The gallery has not been built yet.
 
-| Feature file | Requirements | Cases |
+| Feature file | Requirements | Scenarios |
 | --- | --- | --- |
-| `gallery.feature` | F1.1–F1.3, F2.1–F2.7, F5.5, resilience | 23 |
+| `gallery.feature` | F1.1–F1.3, F2.1–F2.7, F5.5, resilience | 26 |
 | `variations.feature` | F3.1–F3.6, custom dimensions | 32 |
 | `detail.feature` | F4.1–F4.4 | 17 |
+| `health.feature` | the baseline harness | 2 |
+
+A handful pass without meaning anything: assertions about *absence* — "there is
+no link to a previous page", "an image outside the collection is not found" —
+are satisfied by a page that renders nothing and a route that does not exist.
+They become real assertions once there is a gallery to contradict them.
+
+### Selecting scenarios
+
+Every scenario is tagged with the requirement it covers and the build stage it
+belongs to, so slices of the suite are runnable by name:
+
+```powershell
+pytest -c tests/pytest.ini -m "F2_2"                # one requirement
+pytest -c tests/pytest.ini -m "stage1"              # the first slice
+pytest -c tests/pytest.ini -m "stage1 or stage2"    # cumulative
+pytest -c tests/pytest.ini -m "e2e and not resilience"
+```
+
+Requirement ids use underscores (`F2_2`, not `F2.2`) because a dot is ambiguous
+inside a `-m` expression. Tags are declared in `pytest.ini`; `--strict-markers`
+turns a typo into a failed run rather than a scenario nobody can select.
+
+`tests/unit/test_requirement_coverage.py` keeps the tags honest: it fails if a
+documented requirement has no scenario, if a scenario names a requirement that
+does not exist, if a tag is undeclared, or if a scenario carries no build stage.
+
+### Build order
+
+The stages encode dependency — a scenario in stage N relies only on stages
+before it — so they are a sequence, not a grouping.
+
+| Stage | Covers | Why here |
+| --- | --- | --- |
+| 1 | Metadata endpoint and the grid | Nothing else can be asserted until tiles render |
+| 2 | The image proxy, one call per tile | Real bytes, and the cache path |
+| 3 | Pagination | Needs a grid to page through |
+| 4 | The image-count control | Needs the grid; F2.5 requires a real control |
+| 5 | Notices and invalid-page recovery | Unblocks every validation scenario in `variations` |
+| 6 | Resilience | The subtlest logic; wants a working proxy first |
+| 7 | Size and filter parameters | Renders into the grid from stage 1 |
+| 8 | Variation validation and persistence | Needs both notices (5) and variations (7) |
+| 9 | The detail view | Opened from the grid |
+| 10 | Filters and the parameters panel on detail | Needs variations carrying over |
+
+`gallery.feature` comes first because it is the only feature depending on no
+other. `detail.feature` comes last: eight of its scenarios assert that filters
+carry over from the gallery, so they cannot pass before `variations` does.
 
 See [docs/core-features.md](../docs/core-features.md) for the requirement IDs
 and the decisions those scenarios encode.
@@ -297,8 +344,15 @@ when viewed through a client. They belong to unit tests that inspect structure
 directly. F5.5 is the exception: caching is observable, because a repeated
 request must not produce a second upstream call, so it has a scenario.
 
-Also out of scope until the features land: upstream picsum.dev integration, the
-resilience matrix (timeout, retry, fallback), and concurrency validation.
+That exemption is recorded in `UNCOVERED_BY_DESIGN` in
+`tests/unit/test_requirement_coverage.py`, and a test fails if one of those four
+ever acquires a scenario — an exemption that stops being true should be removed,
+not left implying the requirement is untestable.
+
+Also out of scope until the features land: upstream picsum.dev integration and
+concurrency validation. The resilience matrix does have Gherkin — six scenarios
+tagged `@resilience`, covering per-tile failure, stale-cache fallback, and
+timeout behaviour per [ADR 12](../docs/adr/0012-resilience-strategy.md).
 
 ## Adding a BDD scenario
 

@@ -11,11 +11,13 @@ Feature: Image variations
     Given the gallery is available
     And the collection holds 100 images
 
+  @F3_1 @stage7
   Scenario: Images are shown at the default size when I ask for nothing
     When I open the gallery
     Then the images are rendered at size "medium"
     And the images have no filters applied
 
+  @F3_1 @F3_2 @stage7
   Scenario Outline: Choosing a named size
     When I choose the "<size>" size
     Then the response status is 200
@@ -29,6 +31,7 @@ Feature: Image variations
 
   # Custom dimensions are a fourth form of the same size parameter, bounded by
   # a configured ceiling and floor. The UI offers named sizes only.
+  @F3_2 @stage7
   Scenario Outline: Asking for a custom size
     When I open the gallery with size "<size>"
     Then the response status is 200
@@ -39,6 +42,7 @@ Feature: Image variations
       | 300x300  | 300   | 300    |
       | 1200x900 | 1200  | 900    |
 
+  @F3_6 @stage8
   Scenario Outline: A custom size outside the allowed bounds is rejected
     When I open the gallery with size "<size>"
     Then the response status is 200
@@ -61,17 +65,20 @@ Feature: Image variations
       | 300x300x |
       | -100x100 |
 
+  @F2_3 @F3_2 @stage8
   Scenario: A custom size is kept when I move between pages
     When I open the gallery with size "640x480"
     And I open page 2 of the gallery
     Then the images are rendered at 640 by 480 pixels
     And the page shows images 11 to 20
 
+  @F3_3 @stage7
   Scenario: Viewing the collection in grayscale
     When I turn grayscale on
     Then the response status is 200
     And the images are rendered in grayscale
 
+  @F3_4 @stage7
   Scenario Outline: Blurring the images
     When I set the blur to <blur>
     Then the response status is 200
@@ -84,6 +91,7 @@ Feature: Image variations
       | 10   |
 
   # F3.5 — the two filters must be usable at once.
+  @F3_5 @stage7
   Scenario: Combining grayscale and blur
     When I turn grayscale on
     And I set the blur to 7
@@ -91,6 +99,7 @@ Feature: Image variations
     And the images are rendered in grayscale
     And the images are rendered with blur 7
 
+  @F3_5 @stage7
   Scenario: Size and filters apply together
     When I choose the "large" size
     And I turn grayscale on
@@ -100,6 +109,7 @@ Feature: Image variations
     And the images are rendered with blur 3
 
   # F3.6 — rejected at the validation boundary, recovered in the page.
+  @F3_6 @stage8
   Scenario Outline: An invalid size falls back to the default and says so
     When I open the gallery with size "<size>"
     Then the response status is 200
@@ -113,6 +123,7 @@ Feature: Image variations
       | 42      |
       | LARGE!! |
 
+  @F3_6 @stage8
   Scenario Outline: A blur outside the range falls back to none and says so
     When I open the gallery with blur "<blur>"
     Then the response status is 200
@@ -130,6 +141,7 @@ Feature: Image variations
       | high |
       | 3.5  |
 
+  @F3_6 @stage8
   Scenario: An invalid count falls back to the default and says so
     When I open the gallery with a count of "75"
     Then the response status is 200
@@ -137,12 +149,14 @@ Feature: Image variations
     And the page explains that "75" is not a valid image count
 
   # One bad parameter must not discard the good ones alongside it.
+  @F3_6 @stage8
   Scenario: A valid filter survives an invalid one
     When I open the gallery with size "enormous" and blur 6
     Then the images are rendered at size "medium"
     And the images are rendered with blur 6
     And the page explains that "enormous" is not a valid size
 
+  @F2_3 @stage8
   Scenario: Active variations are kept when I move between pages
     Given I am viewing large grayscale images with blur 4
     When I open page 2 of the gallery
