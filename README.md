@@ -148,10 +148,49 @@ makes upstream request/response context loggable once the provider exists.
 Testing strategy and its rationale are documented in
 [tests/README.md](tests/README.md).
 
+## Known upstream behaviour
+
+**picsum.dev occasionally returns the same photograph for two different seeds.**
+Measured on 2026-07-29: seeds 8 and 13 return byte-identical responses, and
+across seeds 1–30 there are 29 distinct images rather than 30.
+
+This is the provider's behaviour, not a defect in this application. Verified by
+requesting picsum directly, bypassing the proxy entirely:
+
+```console
+$ curl -s "https://picsum.dev/400/400?seed=8"  | sha256sum
+7da0e94959d87a63...
+$ curl -s "https://picsum.dev/400/400?seed=13" | sha256sum
+7da0e94959d87a63...
+```
+
+Two consequences worth knowing:
+
+- **The gallery shows what upstream returns.** Image 8 and image 13 are
+  distinct entries with their own ids, URLs, detail pages, and cache keys; they
+  simply happen to render the same photograph. Nothing here dedupes them —
+  doing so would mean the application deciding a page has nine images when the
+  catalogue says ten.
+- **It does not affect determinism.** A given seed always returns the same
+  bytes, which is what pagination and bookmarking rely on ([ADR 9](docs/adr/0009-url-vocabularies.md)).
+  The collision is between *different* seeds, not within one.
+
+If a deployment needed the collision gone, the fix belongs in `provider.py` —
+the id-to-seed translation is the only place that decides what upstream is
+asked for — by mapping ids onto a seed space known to be collision-free. That
+is provider-specific knowledge, which is exactly the kind of thing that module
+exists to hold.
+
 ## Future work
 
-Implement the gallery features from the assignment brief: provider abstraction
-over picsum.dev, transformation and validation modules, the grid and detail
-views, URL-driven pagination, cache keying across all output-affecting inputs,
-retry/backoff with cached fallback, and structured logging for upstream calls
-and cache hit/miss.
+The Core Requirements of the brief are implemented and covered by scenarios.
+What remains is optional rather than outstanding:
+
+- **`/api/images/<id>`** is specified in [the API contract](docs/api-contract.md)
+  and not yet routed. Nothing needs it — the detail page renders server-side —
+  so it is a public JSON surface waiting for a consumer.
+- **Single-flight upstream fetches.** Concurrent misses on a cold key each
+  fetch, measured at 5× duplicate requests
+  ([ADR 14](docs/adr/0014-concurrency-validation.md)). Accepted, not fixed.
+- **The `--image-*` tokens** are ambiguous under custom `WxH` sizes; the grid
+  falls back to `--cell-medium` and the served dimensions govern.
