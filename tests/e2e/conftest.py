@@ -215,6 +215,14 @@ class FakeUpstream:
 
 
 def _compose(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    """Run a compose command against the e2e stack.
+
+    No `-p` is needed: `compose.e2e.yaml` declares `name: gallery-e2e`, so this
+    always targets that project and never the demo stack on 8080. Both files
+    declare a service called `web`, and before the names were explicit they
+    resolved to the *same container* — starting one replaced the other, and
+    `exec web` here could have reached whichever happened to be running.
+    """
     return subprocess.run(
         ["docker", "compose", "-f", str(COMPOSE_FILE), *args],
         cwd=REPO_ROOT,

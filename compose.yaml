@@ -1,3 +1,18 @@
+# The ordinary stack: the shipped image against the real picsum.dev.
+#
+# Named explicitly so it cannot collide with compose.e2e.yaml, which builds the
+# *same image* against a fake upstream. Both declare a service called `web`, so
+# without distinct project names Compose treats them as one container and
+# starting either replaces the other.
+#
+#     docker compose up -d                          demo, on 8080
+#     docker compose -f compose.e2e.yaml up -d      testing, on 8081
+#
+# The upstream is an environment variable rather than something baked into the
+# image (docs/adr/0008-configuration-in-settings.md), which is what lets one
+# artifact serve both purposes.
+name: image-gallery
+
 services:
   web:
     build:

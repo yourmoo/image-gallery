@@ -50,6 +50,26 @@ Then open <http://localhost:8080>. Health endpoint: <http://localhost:8080/healt
 
 Stop with `docker compose down`.
 
+### The same image, two upstreams
+
+The upstream provider is an environment variable, never baked into the image
+([ADR 8](docs/adr/0008-configuration-in-settings.md)), so one artifact serves
+both purposes and they run side by side:
+
+| | Command | Upstream | Shows |
+| --- | --- | --- | --- |
+| **Demo** | `docker compose up -d` | picsum.dev | Real photographs, on 8080 |
+| **Testing** | `docker compose -f compose.e2e.yaml up -d` | a fake in its own container | A 1×1 placeholder, on 8081 |
+
+The test stack's images are deliberately blank: the scenarios assert on the
+dimensions and filters the application *requested upstream*, never on pixels,
+so real photographs would only make the suite slower.
+
+Each file declares its own `name:`, which is what keeps them apart. Compose
+otherwise derives the project from the directory, and since both declare a
+service called `web` they would resolve to the same container — starting one
+would replace the other, and tearing either down would stop both.
+
 For a local (non-container) server:
 
 ```powershell

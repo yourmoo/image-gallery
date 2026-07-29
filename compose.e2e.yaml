@@ -11,7 +11,16 @@
 #     docker compose -f compose.e2e.yaml down
 #
 # The suite talks to `web` on 8081 and to the fake's control API on 8091, so
-# this stack can run alongside the ordinary compose.yaml without a port clash.
+# this stack runs alongside the ordinary compose.yaml without a port clash.
+#
+# **The project name is what actually keeps them apart.** Compose derives it
+# from the directory unless told otherwise, so both files defaulted to
+# `image-gallery` and both declare a service called `web` — which made them the
+# *same container*. Starting one silently replaced the other, and tearing
+# either down stopped both. Naming this project explicitly is what lets the
+# same image run twice: once against the fake for testing, once against
+# picsum.dev for a demo.
+name: gallery-e2e
 
 services:
   fake-upstream:
