@@ -14,5 +14,12 @@ urlpatterns = [
     # which had the split right from the start.
     path("images/<int:image_id>", views.ImageDetailView.as_view(), name="detail"),
     path("img/<int:image_id>", views.ImageProxyView.as_view(), name="image"),
+    # What the detail page's shell fetches to fill itself in. Described in
+    # docs/api-contract.md, which specified it before it was routed.
+    path(
+        "api/images/<int:image_id>",
+        views.ImageApiView.as_view(),
+        name="api_image",
+    ),
     path("healthz", views.HealthView.as_view(), name="healthz"),
 ]

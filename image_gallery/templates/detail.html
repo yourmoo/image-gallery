@@ -5,46 +5,58 @@
 {% block heading %}Image {{ image_id }}{% endblock %}
 
 {% comment %}
-Structure follows docs/ui/design-system.md § Detail view.
+The detail shell. Structure follows docs/ui/design-system.md § Detail view.
 
-Server-rendered rather than built in the browser: this page shows one image and
-needs no client state to decide what that image is, so there is nothing for a
-script to compute. The gallery is client-rendered because its grid is derived
-from bounds; this page is not.
+It carries no image data. The script fetches `/api/images/<id>` and fills this
+in from the payload (docs/adr/0022-the-detail-page-joins-the-client.md), which
+is how the gallery has always worked — the two pages now share one model.
 
-The parameters panel reports **resolved** values (F4.4). Size may read `large`
-even though the user was browsing at `small` — deliberate, per ADR 7, and this
-panel is where they find out. That is the honesty burden the ADR names.
+The **controls are server-rendered**, the **values are not**. That is the same
+split index.html uses: F2.5 wants a real control in the document, one that
+survives a scripting failure and is visible to a reader of the HTML, while the
+values it displays are resolved server-side and only known after the fetch.
+
+The notice banner is deliberately absent. A scenario asserts the element is
+*missing* when there is nothing to say, not merely empty, so the client creates
+it only when the payload carries one.
+
+`data-testid` attributes are the contract the browser suite binds to — see
+tests/e2e/test_detail_steps.py. They are never styling classes.
 {% endcomment %}
 
 {% block content %}
-  {% for message in notices %}
-    <p class="notice" data-testid="notice" role="status">{{ message }}</p>
-  {% endfor %}
-
-  <a class="detail__back" data-testid="back-to-gallery" href="{{ back_url }}">
+  <a class="detail__back" data-testid="back-to-gallery" href="{% url 'index' %}">
     &larr; Back to gallery
   </a>
 
-  <div class="detail">
-    <img class="detail__image" data-testid="detail-image"
-         src="{{ image_url }}" alt="Image {{ image_id }}">
+  {% comment %}
+  `data-image-id` is what the script reads to know which image to ask about —
+  the id is in the path, so the server knows it before any script runs and the
+  client never has to parse a URL. `data-api-url-template` is reversed here for
+  the same reason the gallery reverses its own: no path is written in
+  JavaScript (F5.4).
+  {% endcomment %}
+  <div class="detail"
+       data-testid="detail"
+       data-image-id="{{ image_id }}"
+       data-api-url-template="{% url 'api_image' 0 %}"
+       data-state="loading">
+    {% comment %}
+    Empty until the payload arrives. The frame holds its space so the page does
+    not jump when the image lands — the same reservation the grid's tiles make.
+    {% endcomment %}
+    <img class="detail__image" data-testid="detail-image" alt="Image {{ image_id }}">
 
     {% comment %}
-    The panel reports and sets. Each row pairs the resolved value with the
-    control that changes it, so the two cannot disagree — the value shown is
-    the value the control holds (docs/adr/0007-detail-view-size.md § Amendment).
+    The panel reports and sets: each row pairs the resolved value with the
+    control that changes it, so the two cannot disagree
+    (docs/adr/0007-detail-view-size.md § Amendment).
 
-    A real form with a submit button, unlike the gallery's instant-apply
-    controls: this page is server-rendered and has no script, so there is no
-    change handler to fire a navigation. The button is what a form without
-    JavaScript needs, and it also lets several parameters change at once.
+    No form and no Apply button. Under CSR there is nothing to submit — a
+    control change re-fetches and re-renders, matching the gallery's
+    instant-apply behaviour (docs/ui/ui-notes.md).
     {% endcomment %}
-    <form class="params" data-testid="params" method="get" action="">
-      {% for name, value in carried %}
-        <input type="hidden" name="{{ name }}" value="{{ value }}">
-      {% endfor %}
-
+    <div class="params" data-testid="params">
       <dl class="params__list">
         <dt>Identifier</dt>
         <dd data-testid="param-id">{{ image_id }}</dd>
@@ -52,61 +64,43 @@ panel is where they find out. That is the honesty burden the ADR names.
         <dt><label for="detail_size">Size</label></dt>
         <dd data-testid="param-size">
           <select class="control__field" id="detail_size" name="detail_size"
-                  data-testid="size-control">
-            {% for name in named_sizes %}
-              <option value="{{ name }}"{% if name == size %} selected{% endif %}>{{ name }}</option>
-            {% endfor %}
-          </select>
+                  data-testid="size-control"></select>
           {% comment %}
           The resolved value as text, beside the control. A select shows only
           the options it lists, so a custom size would report as blank — and
           this row is the report as much as the control (F4.4).
           {% endcomment %}
-          <span class="params__value">{{ size }}</span>
+          <span class="params__value" data-testid="size-value"></span>
         </dd>
 
         {% comment %}
-        The custom size gets its own field for the same reason the gallery's
-        does: WxH cannot be enumerated.
-
-        Its own parameter name, too. Both controls wrote to `detail_size` at
-        first, so the form submitted it twice — `detail_size=small` from the
-        select and `detail_size=` from an empty field — and reading a single
-        value takes the last, which meant the empty field silently overrode
-        every choice.
+        The custom size gets its own field, and its own parameter name. Both
+        controls wrote to `detail_size` at first, so the form submitted it
+        twice and the empty one silently overrode every choice.
         {% endcomment %}
         <dt><label for="custom_detail_size">Custom size</label></dt>
         <dd>
           <input class="control__field control__field--narrow" type="text"
                  id="custom_detail_size" name="custom_detail_size"
                  data-testid="custom-size-control"
-                 value="{{ custom_size }}" placeholder="1200x900"
-                 autocomplete="off" size="9">
+                 placeholder="1200x900" autocomplete="off" size="9">
         </dd>
 
         <dt><label for="grayscale">Grayscale</label></dt>
         <dd data-testid="param-grayscale">
-          <input class="control__check" type="checkbox" id="grayscale" name="grayscale"
-                 value="1" data-testid="grayscale-control"{% if grayscale %} checked{% endif %}>
-          <span class="params__value">{{ grayscale|yesno:"on,off" }}</span>
+          <input class="control__check" type="checkbox" id="grayscale"
+                 name="grayscale" value="1" data-testid="grayscale-control">
+          <span class="params__value" data-testid="grayscale-value"></span>
         </dd>
 
         <dt><label for="blur">Blur</label></dt>
         <dd data-testid="param-blur">
           <input class="control__range" type="range" id="blur" name="blur"
-                 data-testid="blur-control"
-                 min="0" max="{{ max_blur }}" step="1" value="{{ blur }}">
-          <span class="params__value">{{ blur }}</span>
+                 data-testid="blur-control" min="0" step="1" value="0">
+          <span class="params__value" data-testid="blur-value"></span>
         </dd>
       </dl>
-
-      {% comment %}
-      The no-script fallback. detail.js hides it and makes each control apply
-      on change, so the page matches the gallery's instant-apply behaviour when
-      script is available and still works when it is not.
-      {% endcomment %}
-      <button class="button" type="submit" data-testid="apply">Apply</button>
-    </form>
+    </div>
   </div>
 
   <script type="module" src="{% static 'js/detail-panel.js' %}"></script>

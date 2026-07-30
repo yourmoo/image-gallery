@@ -194,16 +194,26 @@ def validate_page(raw: str | None, last_page: int) -> tuple[int, Rejection | Non
 # The duplication with static/js/derive.js is real and deliberate: two renderers
 # need the same sentences, and the alternative is shipping the wording through
 # an endpoint so one can read the other's copy.
+#
+# **A sentence must not name the value it fell back to unless it knows it.**
+# `invalid_size` used to end "— showing medium.", which was true in the gallery
+# and false on the detail page, where ADR 7 falls back to `large`. One hardcoded
+# fallback cannot describe two views, and a banner that misreports what it did
+# is worse than one that stays quiet about it: the page already displays the
+# size it settled on, in a control and in the parameters panel.
+#
+# What the reader actually needs is *why* it was refused and what would work —
+# "between 16 and 1600" is the part they cannot see anywhere on the page.
 NOTICE_MESSAGES = {
     "invalid_page": '"{value}" isn\'t a page in this collection — showing page 1.',
-    "invalid_count": '"{value}" isn\'t an available image count — showing 10 per page.',
-    "invalid_size": '"{value}" isn\'t a valid size — showing medium.',
+    "invalid_count": '"{value}" isn\'t an available image count — showing {default_count} per page.',
+    "invalid_size": '"{value}" isn\'t a size we can show. Pick {named}, or type a custom size between {minimum} and {maximum} pixels.',
     "invalid_grayscale": '"{value}" isn\'t a valid grayscale setting — showing colour.',
-    "invalid_blur": '"{value}" isn\'t a valid blur — showing none.',
+    "invalid_blur": '"{value}" isn\'t a valid blur — blur can be 0 to {max_blur}.',
 }
 
 
-def notice_messages(tokens) -> list[str]:
+def notice_messages(tokens, *, bounds: dict | None = None) -> list[str]:
     """Turn `?notice=` tokens into the sentences a reader sees.
 
     A token carries the rejected value after a colon — `invalid_size:huge` —
@@ -213,14 +223,39 @@ def notice_messages(tokens) -> list[str]:
     Unrecognised tokens are dropped rather than displayed, so a hand-edited URL
     cannot put arbitrary text on the page. The value is substituted into a
     fixed sentence and escaped by the template, never treated as markup.
+
+    `bounds` carries the configured limits the sentences quote. They are
+    deployment configuration (ADR 8), so a sentence that hardcoded "1600" would
+    start lying the moment someone retuned `GALLERY_MAX_DIMENSION` — the same
+    way "showing medium" lied on a page that shows large. Callers pass
+    `default_bounds()`; the default here keeps the function usable on its own.
     """
+    values = default_bounds() if bounds is None else bounds
+
     messages = []
     for token in tokens:
         name, _, value = str(token).partition(":")
         template = NOTICE_MESSAGES.get(name)
         if template is not None:
-            messages.append(template.format(value=unquote(value)))
+            messages.append(template.format(value=unquote(value), **values))
     return messages
+
+
+def default_bounds() -> dict:
+    """The configured limits the notice sentences quote.
+
+    Read here rather than in each view so the two renderers cannot disagree,
+    and read from `settings` rather than the environment per ADR 8.
+    """
+    from django.conf import settings
+
+    return {
+        "named": ", ".join(NAMED_SIZES),
+        "minimum": settings.GALLERY_MIN_DIMENSION,
+        "maximum": settings.GALLERY_MAX_DIMENSION,
+        "max_blur": settings.GALLERY_MAX_BLUR,
+        "default_count": settings.GALLERY_DEFAULT_PAGE_SIZE,
+    }
 
 
 NAMED_SIZES = ("small", "medium", "large")
