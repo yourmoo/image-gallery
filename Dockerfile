@@ -38,6 +38,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)"
 
+# No --access-logfile: because a page is N separate /img/<id> requests, the
+# access log emits a line per tile -- 50 for one default page load -- plus a
+# /healthz line every 30s from the HEALTHCHECK below. That buried everything
+# else in `docker compose logs`. Errors still surface: --error-logfile keeps
+# gunicorn's own failures, and application logs go through Django's LOGGING.
+#
 # A page is N concurrent /images/<id> requests, not one request that fans out
 # internally (docs/adr/0017-image-fetch-timing.md), so request slots ARE the
 # fetch concurrency. Sync workers would serve 2 at a time and re-serialise the
@@ -49,5 +55,4 @@ CMD ["gunicorn", "image_gallery.wsgi:application", \
      "--worker-class", "gthread", \
      "--workers", "2", \
      "--threads", "8", \
-     "--access-logfile", "-", \
      "--error-logfile", "-"]

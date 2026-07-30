@@ -8,9 +8,11 @@ fate is decided here rather than during page assembly
 (docs/adr/0017-image-fetch-timing.md).
 """
 
+import time
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
@@ -207,6 +209,89 @@ def test_a_served_image_reports_which_tier_answered(client):
     with patch("image_gallery.views.image.PicsumProvider.fetch", return_value=a_result()):
         assert client.get(url_for(1))["X-Image-Source"] == "upstream"
         assert client.get(url_for(1))["X-Image-Source"] == "cache"
+
+
+# --- what the browser is told to keep ------------------------------------
+
+
+def test_an_image_may_be_kept_by_the_browser(client):
+    """The server cache saves the upstream fetch; this saves the round trip.
+
+    Without it, reloading a 50-tile page reissued 50 requests the server
+    answered from cache in about a millisecond each — fast per request, and
+    visibly slow to someone watching the grid repaint.
+    """
+    with patch("image_gallery.views.image.PicsumProvider.fetch", return_value=a_result()):
+        response = client.get(url_for(1))
+
+    assert "public" in response["Cache-Control"]
+    assert f"max-age={settings.GALLERY_BROWSER_CACHE_MAX_AGE}" in response["Cache-Control"]
+
+
+def test_an_image_is_marked_immutable(client):
+    """A statement of fact, not an optimistic hint: every parameter that
+    changes the bytes is in the URL, and a given seed and size return
+    byte-identical bytes (docs/adr/0012-resilience-strategy.md)."""
+    with patch("image_gallery.views.image.PicsumProvider.fetch", return_value=a_result()):
+        assert "immutable" in client.get(url_for(1))["Cache-Control"]
+
+
+def test_a_cached_image_is_still_cacheable_by_the_browser(client):
+    """Which tier answered is the server's business. The bytes are the same, so
+    the advice to the browser must be too."""
+    with patch("image_gallery.views.image.PicsumProvider.fetch", return_value=a_result()):
+        client.get(url_for(1))
+        response = client.get(url_for(1))
+
+    assert response["X-Image-Source"] == "cache"
+    assert "immutable" in response["Cache-Control"]
+
+
+def test_a_placeholder_is_never_cached(client):
+    """A placeholder describes one bad moment upstream, not the image.
+
+    Letting a browser keep it would turn a transient outage into a tile that
+    stays broken long after upstream recovered — for a week, at the max-age a
+    real image gets.
+    """
+    with patch(
+        "image_gallery.views.image.PicsumProvider.fetch", side_effect=UpstreamError("down")
+    ):
+        response = client.get(url_for(1))
+
+    assert response.status_code == 504
+    assert response["Cache-Control"] == "no-store"
+
+
+def test_a_stale_image_is_still_the_real_bytes(client):
+    """Stale means "older copy of the same bytes", not "degraded". It is a real
+    image and may be kept like one."""
+    cache.set(
+        "img:1:400x400:g0:b0",
+        {"result": a_result(), "stored_at": time.time() - 10_000},
+    )
+
+    with override_settings(GALLERY_CACHE_TTL=1):
+        with patch(
+            "image_gallery.views.image.PicsumProvider.fetch",
+            side_effect=UpstreamError("down"),
+        ):
+            response = client.get(url_for(1))
+
+    assert response["X-Image-Source"] == "stale"
+    assert "immutable" in response["Cache-Control"]
+
+
+@override_settings(GALLERY_BROWSER_CACHE_MAX_AGE=0)
+def test_browser_caching_can_be_turned_off(client):
+    """`max-age=0, immutable` is a contradiction, so zero means no-store.
+
+    The e2e stack sets zero: its scenarios empty the server cache and assert on
+    what reached the fake upstream, which a browser-held image would prevent
+    the server from ever seeing.
+    """
+    with patch("image_gallery.views.image.PicsumProvider.fetch", return_value=a_result()):
+        assert client.get(url_for(1))["Cache-Control"] == "no-store"
 
 
 # --- parameters ----------------------------------------------------------

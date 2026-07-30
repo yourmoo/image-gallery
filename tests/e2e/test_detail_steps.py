@@ -26,6 +26,7 @@ test_gallery_steps.py:
 from __future__ import annotations
 
 import re
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from playwright.sync_api import expect
@@ -240,16 +241,14 @@ def on_detail_page(image_id: int, scenario_state):
 
 @then(parsers.parse('the image is rendered at size "{size}"'))
 def image_at_named_size(size: str, scenario_state):
-    """Assert on what was fetched, not on the rendered box.
+    """Assert on what was requested, not on the rendered box.
 
     Size is a fetch-time decision (ADR 9), and CSS could scale any image to any
-    box, so the request log is the only honest observation.
+    box, so the box itself proves nothing.
     """
-    request = _detail_request(scenario_state)
-    assert request.width is not None and request.height is not None, (
-        f"upstream request carried no dimensions: {request.path}"
+    assert _rendered_size(scenario_state) == size, (
+        f"expected the image at {size!r}, got {_rendered_size(scenario_state)!r}"
     )
-    scenario_state["observed_dimensions"] = (request.width, request.height)
 
 
 @then(parsers.parse("the image is rendered at {width:d} by {height:d} pixels"))
@@ -334,6 +333,29 @@ def _detail_request(scenario_state):
     requests = scenario_state["upstream"].image_requests
     assert requests, "no upstream image request was made for the detail image"
     return requests[-1]
+
+
+def _rendered_size(scenario_state) -> str:
+    """The size the detail image is showing, as the client asked for it.
+
+    Read from the rendered `src` rather than the upstream log. Both observe the
+    same fetch-time decision (ADR 9), but only this one survives the case where
+    nothing was fetched — which is real under
+    docs/adr/0022-the-detail-page-joins-the-client.md: a control change
+    re-renders instead of navigating, so choosing the size the page already
+    shows produces an identical `src` and the browser reuses the image it
+    holds. Refetching it to satisfy an assertion would mean doing pointless
+    work in production for a test's benefit.
+
+    The `src` still points at this application, never upstream, so reading it
+    does not weaken the proxy boundary the log was chosen to respect.
+    """
+    source = scenario_state["page"].get_by_test_id("detail-image").get_attribute("src")
+    assert source, "the detail image has no src, so nothing was rendered"
+
+    size = parse_qs(urlparse(source).query).get("size", [""])[0]
+    assert size, f"the rendered src names no size: {source}"
+    return size
 
 
 def _assert_panel_state(scenario_state, testid: str, *, on: bool) -> None:

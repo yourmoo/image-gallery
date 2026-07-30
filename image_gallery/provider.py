@@ -33,7 +33,7 @@ from urllib.request import Request, urlopen
 
 from django.conf import settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("gallery.upstream")
 
 
 class UpstreamError(Exception):
@@ -155,14 +155,51 @@ class PicsumProvider:
 
         last: Exception | None = None
         for attempt in range(self.retries + 1):
+            # The outbound call, logged before it is made: a request that never
+            # returns leaves this line as the only evidence it was attempted.
+            logger.info(
+                "upstream request",
+                extra={
+                    "url": url,
+                    "image_id": image_id,
+                    "attempt": attempt + 1,
+                    "of": self.retries + 1,
+                },
+            )
+            started = time.monotonic()
             try:
                 content, content_type = self._get(url)
             except (URLError, HTTPError, OSError, TimeoutError) as exc:
                 last = exc
+                # Per-attempt, so a success on retry 2 still shows that retry 1
+                # failed and why. `getattr` because only HTTPError has a code.
+                logger.warning(
+                    "upstream attempt failed",
+                    extra={
+                        "url": url,
+                        "image_id": image_id,
+                        "attempt": attempt + 1,
+                        "status": getattr(exc, "code", None),
+                        "error": type(exc).__name__,
+                        "detail": str(exc),
+                        "duration_ms": round((time.monotonic() - started) * 1000, 1),
+                    },
+                )
                 if attempt < self.retries:
                     time.sleep(self.backoff * (attempt + 1))
                 continue
 
+            logger.info(
+                "upstream response",
+                extra={
+                    "url": url,
+                    "image_id": image_id,
+                    "status": 200,
+                    "content_type": content_type,
+                    "bytes": len(content),
+                    "duration_ms": round((time.monotonic() - started) * 1000, 1),
+                },
+            )
             return ImageResult(
                 content=content,
                 content_type=content_type,
@@ -175,8 +212,19 @@ class PicsumProvider:
                 source="upstream",
             )
 
-        logger.warning(
-            "upstream fetch failed", extra={"image_id": image_id, "error": str(last)}
+        # Every attempt is spent. ERROR rather than WARNING: the individual
+        # attempts were warnings because a retry might still save them, and
+        # nothing can save this one — the caller is about to fall back to stale
+        # bytes or a placeholder.
+        logger.error(
+            "upstream fetch failed",
+            extra={
+                "url": url,
+                "image_id": image_id,
+                "attempts": self.retries + 1,
+                "error": type(last).__name__ if last else None,
+                "detail": str(last),
+            },
         )
         raise UpstreamError(f"could not fetch image {image_id}: {last}") from last
 

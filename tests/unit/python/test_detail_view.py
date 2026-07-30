@@ -1,18 +1,24 @@
-"""`/images/<id>` — the detail page.
+"""`/images/<id>` — the detail page's shell.
 
 A page, not bytes: `/img/<id>` serves those. The two are separate routes
 because a user links to and bookmarks the first while an `<img>` element
 fetches the second, and one path cannot be both.
 
-The rule this view exists to apply is docs/adr/0007-detail-view-size.md's
-resolution of F4.2 against F4.3. Size and filters behave *differently* on the
-way from grid to detail:
+The rule this page applies is docs/adr/0007-detail-view-size.md's resolution of
+F4.2 against F4.3. Size and filters behave *differently* on the way from grid
+to detail:
 
     size       presentation — forced up, never down
     grayscale  content — carried over untouched
     blur       content — carried over untouched
 
 Neither requirement overrides the other; they were addressing different things.
+
+`detail_size` still lives here because it is the pure rule. What the *page*
+reports now comes from `/api/images/<id>`, so those assertions moved to
+test_api_image.py with the content
+(docs/adr/0022-the-detail-page-joins-the-client.md). What is left below is what
+the shell alone still decides.
 """
 
 import pytest
@@ -61,7 +67,7 @@ def test_the_comparison_follows_the_configured_large():
     assert detail_size("900x900", large="800x800") == "900x900"
 
 
-# --- the page ------------------------------------------------------------
+# --- the shell -----------------------------------------------------------
 
 
 def test_the_detail_page_is_html_not_bytes(client):
@@ -71,224 +77,68 @@ def test_the_detail_page_is_html_not_bytes(client):
     assert "text/html" in response["Content-Type"]
 
 
-def test_the_detail_page_shows_the_image_at_large(client):
-    """The <img> points at the proxy, at the size this view resolved."""
+def test_the_shell_carries_the_id_the_script_needs(client):
+    """The id is in the path, so the server knows it before any script runs —
+    the client never has to parse a URL to find out which image this is."""
     body = client.get(url_for(7)).content.decode()
 
-    assert 'data-testid="detail-image"' in body
-    assert "size=large" in body
+    assert 'data-image-id="7"' in body
 
 
-def test_a_custom_size_larger_than_large_reaches_the_image(client):
-    body = client.get(url_for(7), {"size": "1200x900"}).content.decode()
+def test_the_shell_reverses_the_api_route(client):
+    """No path is written in JavaScript (F5.4): the template reverses the route
+    and the script substitutes the id."""
+    body = client.get(url_for(7)).content.decode()
 
-    assert "size=1200x900" in body
-
-
-def test_filters_carry_over_untouched(client):
-    """F4.3 — unlike size, these describe how the image should look anywhere."""
-    body = client.get(url_for(7), {"grayscale": "1", "blur": "4"}).content.decode()
-
-    assert "grayscale=1" in body
-    assert "blur=4" in body
+    assert f'data-api-url-template="{reverse("api_image", args=[0])}"' in body
 
 
-def test_the_page_carries_no_provider_vocabulary(client):
-    body = client.get(url_for(7)).content.decode().lower()
+def test_the_shell_carries_no_image_data(client):
+    """It is a shell. Resolved values arrive from the API, so finding one baked
+    into the markup would mean the two could disagree."""
+    body = client.get(url_for(7), {"size": "small"}).content.decode()
 
-    assert "seed" not in body
-    assert "picsum" not in body
-
-
-@pytest.mark.parametrize("image_id", [101, 999, 0])
-def test_an_image_outside_the_collection_is_not_found(client, image_id):
-    assert client.get(url_for(image_id)).status_code == 404
+    assert "size=large" not in body
+    assert 'src="/img/' not in body
 
 
-def test_an_invalid_parameter_is_corrected_rather_than_refused(client):
-    """The detail page is a document, so it recovers like the shell does —
-    a pasted URL with a bad blur should still show the image."""
-    response = client.get(url_for(7), {"blur": "99"})
-
-    assert response.status_code == 302
-    assert "notice=invalid_blur" in response["Location"]
-
-
-def test_the_corrected_page_explains_what_was_rejected(client):
-    """Rendered server-side, unlike the gallery's.
-
-    The gallery builds its banner in JavaScript because the grid is built there
-    anyway; this page is server-rendered, so a script here would exist only to
-    move markup the template could emit directly — and it would leave the
-    explanation missing for the moment before the script ran.
-    """
-    body = client.get(url_for(7), {"notice": "invalid_blur:99"}).content.decode()
-
-    assert 'data-testid="notice"' in body
-    assert "99" in body
-
-
-def test_a_page_with_nothing_to_explain_renders_no_notice(client):
-    """Absence, not an empty banner: the scenario asserting no message is
-    shown counts elements."""
-    assert 'data-testid="notice"' not in client.get(url_for(7)).content.decode()
-
-
-def test_an_unrecognised_notice_token_is_ignored(client):
-    """A hand-edited URL must not put arbitrary text on the page."""
-    body = client.get(url_for(7), {"notice": "<script>alert(1)</script>"}).content.decode()
+def test_the_shell_renders_no_notice(client):
+    """A scenario asserts the banner is *absent* when there is nothing to say,
+    so the client creates it only when the payload carries one."""
+    body = client.get(url_for(7), {"blur": "99"}).content.decode()
 
     assert 'data-testid="notice"' not in body
-    assert "alert(1)" not in body
 
 
-# --- the parameters panel (F4.4) -----------------------------------------
+def test_a_bad_parameter_does_not_redirect(client):
+    """It answers 200 and lets the payload explain.
+
+    The old redirect is what produced the crash this change came from: two
+    parameters fed the size, the correction dropped only one, and the page
+    redirected to itself until the browser gave up. Nothing redirects now, so
+    the loop cannot be reintroduced by getting that list wrong again.
+    """
+    assert client.get(url_for(7), {"blur": "99"}).status_code == 200
+    assert client.get(url_for(7), {"custom_detail_size": "3000x1000"}).status_code == 200
+    assert client.get(url_for(7), {"detail_size": "enormous"}).status_code == 200
 
 
-def test_the_panel_reports_the_resolved_values_not_the_requested_ones(client):
-    """The honesty burden of ADR 7: this view silently changes the user's size,
-    and the panel showing `large` is what keeps that from being a surprise."""
-    body = client.get(url_for(7), {"size": "small"}).content.decode()
-
-    assert 'data-testid="param-size"' in body
-    assert ">large<" in body.replace(" ", "").replace("\n", "")
-
-
-def test_the_panel_identifies_the_image_in_client_vocabulary(client):
-    """"Image 7", never "seed 7" — ADR 9."""
+def test_the_controls_exist_in_the_document(client):
+    """Server-rendered, like the gallery's: F2.5 wants a real control that
+    survives a scripting failure and is visible to a reader of the HTML. Only
+    the *values* wait for the payload."""
     body = client.get(url_for(7)).content.decode()
 
-    assert 'data-testid="param-id"' in body
-    assert "7" in body
+    for testid in ("size-control", "custom-size-control", "grayscale-control", "blur-control"):
+        assert f'data-testid="{testid}"' in body
 
 
-def test_the_panel_reports_both_filters(client):
-    body = client.get(url_for(7), {"grayscale": "1", "blur": "4"}).content.decode()
+@pytest.mark.parametrize("image_id", [0, 101, 999])
+def test_an_image_outside_the_collection_is_not_found(client, image_id):
+    """Refused at the document, not in the payload: a bookmark, a crawler and a
+    `curl` all need to see the 404, and the id is known before any script runs.
 
-    assert 'data-testid="param-grayscale"' in body
-    assert 'data-testid="param-blur"' in body
-
-
-# --- the panel as a control surface (ADR 7, amended) ---------------------
-
-
-def test_the_panel_offers_a_control_for_every_value_it_reports(client):
-    """F4.4 as amended: the panel reports *and* sets.
-
-    A value shown in a control the user can operate is more discoverable than
-    the same value shown as static text — changing it demonstrates what it
-    means. That is why the amendment strengthens the honesty burden ADR 7
-    placed on this panel rather than weakening it.
+    A bad *parameter* is different — it has a sensible substitute, so it
+    recovers (docs/adr/0006-recover-and-explain.md).
     """
-    body = client.get(url_for(7)).content.decode()
-
-    assert 'data-testid="size-control"' in body
-    assert 'data-testid="grayscale-control"' in body
-    assert 'data-testid="blur-control"' in body
-
-
-def test_the_size_control_offers_every_named_size_including_smaller_ones(client):
-    """The page opens at `large`, but the user may choose down from there.
-
-    That is the amendment: brief line 71 is satisfied by what the application
-    does on arrival, not by refusing the user a smaller image afterwards.
-    """
-    body = client.get(url_for(7)).content.decode()
-
-    for name in ("small", "medium", "large"):
-        assert f'value="{name}"' in body
-
-
-def test_a_size_chosen_here_is_honoured_rather_than_forced_up(client):
-    """The distinction the amendment turns on.
-
-    Arriving from a `small` gallery still gives `large` — that is the default.
-    Asking for `small` *on this page* is a choice, and is obeyed.
-    """
-    body = client.get(url_for(7), {"detail_size": "small"}).content.decode()
-
-    assert "size=small" in body
-
-
-def test_the_panel_reports_the_size_chosen_here(client):
-    """Report and control must agree after a change, not only on arrival."""
-    body = client.get(url_for(7), {"detail_size": "small"}).content.decode()
-
-    assert 'data-testid="param-size"' in body
-    assert ">small<" in body.replace(" ", "").replace("\n", "")
-
-
-def test_arriving_without_a_choice_still_opens_large(client):
-    """The default, and every reason for it, is unchanged."""
-    body = client.get(url_for(7), {"size": "small"}).content.decode()
-
-    assert "size=large" in body
-
-
-def test_a_size_chosen_here_does_not_reach_the_back_link(client):
-    """A choice made on this page belongs to this page.
-
-    Otherwise opening one image at `small` would silently re-render the whole
-    grid on return — a change the user never asked for.
-
-    Asserts on the back link's own href rather than on the page as a whole:
-    `small` legitimately appears elsewhere, as an option in the size control.
-    """
-    import re
-
-    body = client.get(
-        url_for(7), {"size": "large", "detail_size": "small"}
-    ).content.decode()
-
-    back = re.search(r'data-testid="back-to-gallery" href="([^"]+)"', body)
-    assert back, "no back link found"
-
-    assert "size=large" in back.group(1), "the back link keeps the gallery's size"
-    assert "small" not in back.group(1), "and not the one chosen on this page"
-
-
-def test_an_invalid_choice_here_recovers_like_any_other(client):
-    response = client.get(url_for(7), {"detail_size": "enormous"})
-
-    assert response.status_code == 302
-    assert "notice=invalid_size" in response["Location"]
-
-
-def test_an_empty_custom_size_does_not_override_the_selected_one(client):
-    """The form submits both size controls, and the empty one must not win.
-
-    The panel's select and its custom-size field both wrote to `detail_size`,
-    so choosing `small` submitted `detail_size=small&detail_size=` — and
-    reading a single value takes the last, which was the empty field. The
-    select appeared to do nothing at all.
-    """
-    body = client.get(
-        url_for(7), {"detail_size": ["small", ""]}
-    ).content.decode()
-
-    assert "size=small" in body, "the chosen size must survive an empty field"
-
-
-def test_a_custom_size_wins_over_the_select(client):
-    """When both carry a value, the field is the more specific intent — it is
-    the one the user typed."""
-    body = client.get(
-        url_for(7), {"detail_size": "large", "custom_detail_size": "300x300"}
-    ).content.decode()
-
-    assert "size=300x300" in body
-
-
-# --- the way back --------------------------------------------------------
-
-
-def test_the_back_link_restores_the_page_and_the_filters(client):
-    """F4.1. The tile link carried this state here; the back link returns it,
-    so the round trip preserves where the user was."""
-    body = client.get(
-        url_for(7), {"page": "3", "size": "small", "grayscale": "1", "blur": "4"}
-    ).content.decode()
-
-    assert 'data-testid="back-to-gallery"' in body
-    assert "page=3" in body
-    assert "size=small" in body, "the *gallery's* size, not the detail view's"
+    assert client.get(url_for(image_id)).status_code == 404

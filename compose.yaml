@@ -6,7 +6,7 @@
 # starting either replaces the other.
 #
 #     docker compose up -d                          demo, on 8080
-#     docker compose -f compose.e2e.yaml up -d      testing, on 8081
+#     docker compose -f tests/compose.e2e.yaml up -d      testing, on 8081
 #
 # The upstream is an environment variable rather than something baked into the
 # image (docs/adr/0008-configuration-in-settings.md), which is what lets one
@@ -25,7 +25,11 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: "*"
       DJANGO_LOG_LEVEL: "INFO"
-      GALLERY_CACHE_TTL: "300"
+      # Both windows, always together: RETENTION must exceed TTL or the
+      # stale-fallback tier can never fire. Pinning only TTL here once left the
+      # ordering to whatever the default happened to be.
+      GALLERY_CACHE_TTL: "3600"
+      GALLERY_CACHE_RETENTION: "86400"
       GALLERY_CACHE_MAX_ENTRIES: "1000"
       GALLERY_CACHE_CULL_FREQUENCY: "3"
       GALLERY_CACHE_DIR: "/dev/shm/gallery-cache"

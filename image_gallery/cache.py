@@ -22,6 +22,7 @@ would inflate every entry by a third for nothing.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Callable
 
@@ -29,6 +30,8 @@ from django.conf import settings
 from django.core.cache import cache
 
 from .provider import ImageResult
+
+logger = logging.getLogger("gallery.cache")
 
 # Namespaces the keys so this cache cannot collide with anything else stored in
 # the same backend.
@@ -63,25 +66,39 @@ class ImageCache:
         expiry is set to retention, and freshness is a shorter window that only
         this module knows about.
         """
-        cache.set(
-            self.key(
-                result.image_id, result.width, result.height, result.grayscale, result.blur
-            ),
-            {"result": result, "stored_at": self._now()},
+        key = self.key(
+            result.image_id, result.width, result.height, result.grayscale, result.blur
+        )
+        cache.set(key, {"result": result, "stored_at": self._now()})
+        logger.debug(
+            "cache store", extra={"key": key, "bytes": len(result.content)}
         )
 
     def get_fresh(
         self, image_id: int, width: int, height: int, grayscale: bool, blur: int
     ) -> ImageResult | None:
         """The cached image, if it is still inside the freshness window."""
+        key = self.key(image_id, width, height, grayscale, blur)
         entry = self._entry(image_id, width, height, grayscale, blur)
         if entry is None:
+            logger.debug("cache miss", extra={"key": key, "outcome": "miss"})
             return None
 
         age = self._now() - entry["stored_at"]
         if age > settings.GALLERY_CACHE_TTL:
+            # Present but past the TTL. Reported as its own outcome rather than
+            # as a miss: the bytes are still here, and whether they get used is
+            # the caller's decision after upstream has had its chance.
+            logger.debug(
+                "cache expired",
+                extra={"key": key, "outcome": "expired", "age_s": round(age, 1)},
+            )
             return None
 
+        logger.debug(
+            "cache hit",
+            extra={"key": key, "outcome": "hit", "age_s": round(age, 1)},
+        )
         return self._tag(entry["result"], "cache")
 
     def get_stale(
@@ -93,12 +110,24 @@ class ImageCache:
         falling back after an upstream failure should not have to try both
         windows in order. The returned `source` distinguishes them.
         """
+        key = self.key(image_id, width, height, grayscale, blur)
         entry = self._entry(image_id, width, height, grayscale, blur)
         if entry is None:
+            # Reached only after upstream already failed, so this is the moment
+            # a tile becomes a placeholder. WARNING, not DEBUG: it is the last
+            # tier before the user sees a hole in the grid.
+            logger.warning(
+                "cache miss with no fallback", extra={"key": key, "outcome": "miss"}
+            )
             return None
 
         age = self._now() - entry["stored_at"]
-        return self._tag(entry["result"], "cache" if age <= settings.GALLERY_CACHE_TTL else "stale")
+        source = "cache" if age <= settings.GALLERY_CACHE_TTL else "stale"
+        logger.info(
+            "serving cached copy after upstream failure",
+            extra={"key": key, "outcome": source, "age_s": round(age, 1)},
+        )
+        return self._tag(entry["result"], source)
 
     # -- internals -------------------------------------------------------
 

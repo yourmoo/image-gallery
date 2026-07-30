@@ -38,17 +38,25 @@ python tests/js_tests.py --no-report
 ## What belongs here
 
 Only **pure** functions — no DOM, no `fetch`, no `window`. That constraint is
-the reason `static/js/` is split in two:
+the reason `static/js/` is split in two, once per page:
 
 | Module | Contents | Tested here |
 | --- | --- | --- |
 | `derive.js` | Id arithmetic, notice text, bounds parsing | **Yes** |
+| `detail-render.js` | Query building, corrected search, notice banner | **Yes** |
 | `gallery.js` | DOM construction, event wiring, `location` | No — browser tier |
+| `detail-panel.js` | The detail page's DOM and fetch | No — browser tier |
 
 Keeping the pure half separate is what lets it be tested without jsdom or a
 headless browser, and it is a real design constraint rather than a testing
 convenience: logic that needs a DOM to run is logic that cannot be checked
 cheaply.
+
+`detail-render.js`'s `buildNotice` is the apparent exception and is worth
+understanding: it builds elements, but takes the `document` as an argument, so
+the test passes a stub implementing the four methods it uses. Injecting the
+document rather than reaching for a global is what keeps it on this side of the
+line — and is the pattern to follow rather than reaching for jsdom.
 
 Anything requiring a document belongs in `features/`, where a real browser
 renders it.

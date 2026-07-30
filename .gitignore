@@ -11,4 +11,7 @@ coverage.xml
 htmlcov/
 tests/reports/
 staticfiles/
+# The default GALLERY_CACHE_DIR when running outside Docker. In the container
+# this is a tmpfs mount instead, so it only ever appears during local runs.
+.gallery-cache/
 .env

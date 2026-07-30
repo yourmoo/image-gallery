@@ -14,6 +14,7 @@ behaves when they are wrong.
 | --- | --- | --- | --- |
 | `index` | `/` | GET | `text/html` |
 | `detail` | `/images/1` | GET | `text/html` |
+| `api_image` | `/api/images/1` | GET | `application/json` |
 | `image` | `/img/1` | GET | `image/jpeg` |
 | `healthz` | `/healthz` | GET | `application/json` |
 
@@ -51,6 +52,26 @@ A **page**, not bytes — `/img/<id>` serves those. Two routes because a user
 links to and bookmarks the first while an `<img>` element fetches the second,
 and one path cannot be both.
 
+**A shell.** It carries no image data: the script fetches `api_image` and
+builds the page from the payload
+([ADR 22](adr/0022-the-detail-page-joins-the-client.md)). What it does carry is
+the id — known from the path before any script runs — and the reversed API
+route, so no path is written in JavaScript (F5.4).
+
+| Attribute | Source | Purpose |
+| --- | --- | --- |
+| `data-image-id` | The path | Which image to ask about |
+| `data-api-url-template` | `reverse("api_image", args=[0])` | Where to ask |
+
+`200` for any id inside the catalogue, **including one with a bad parameter** —
+the payload reports the fallback and explains it. An id outside the catalogue
+returns `404`: it has no sensible substitute, and a bookmark or a crawler needs
+to see that at the document.
+
+The parameters below are read by `api_image`, not by this route, but they are
+what a user's URL carries and are listed here because this is the address they
+paste.
+
 Accepts the same parameters as `index`, plus `detail_size`, and applies one
 rule of its own on arrival: **size is forced up, filters carry over untouched**
 ([ADR 7](adr/0007-detail-view-size.md)).
@@ -77,9 +98,56 @@ silently changes one of the user's parameters, and the panel is where they find
 out (F4.4). It is also the control surface — each value is shown in the widget
 that sets it, so report and control cannot disagree.
 
-Like `index`, this is a document boundary — an invalid parameter is corrected
-by a redirect rather than refused. An id outside the catalogue is the exception
-and returns `404`: it has no sensible substitute.
+### `api_image` — one image, described
+
+What the detail shell fetches to fill itself in. It reports **resolved**
+values — what will actually be served, which differs from what was requested
+whenever ADR 7's rule fires or a parameter falls back — and those cannot be
+derived from the URL by the client that sent it.
+
+Takes the same parameters as `detail`.
+
+```json
+{"id": 3, "url": "/img/3?size=large", "backUrl": "/?page=2&size=small",
+ "size": "large", "grayscale": false, "blur": 0,
+ "customSize": "", "namedSizes": ["small", "medium", "large"],
+ "maxBlur": 10, "notices": []}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `url` | The bytes, at this application's `image` route. **Complete and used verbatim** — the server builds it by reversing the route (F5.2, F5.4), so no URL-construction rule lives in JavaScript. |
+| `backUrl` | The gallery the user came from, with **its** size, not this page's (F4.1). |
+| `size` | Resolved. `large` even when the gallery was showing `small`. |
+| `customSize` | The `WxH` value for the field, empty when a named size is active — a `<select>` cannot display a value it does not list. |
+| `namedSizes`, `maxBlur` | What the controls may offer, from configuration, so a widget cannot offer a value the validator would reject. |
+| `notices` | What was rejected, and why. Empty when everything was honoured. |
+
+**An invalid parameter is recovered and explained here**, in the same response:
+
+```json
+{"notices": [{"code": "invalid_size", "value": "3000x1000",
+  "message": "\"3000x1000\" isn't a size we can show. Pick small, medium, large, or type a custom size between 16 and 1600 pixels."}]}
+```
+
+`code` and `value` let a client act on the rejection — highlight the offending
+control — without parsing English; `message` is the part a person reads. The
+sentence is written server-side so it can quote configured bounds, and so the
+wording has one home rather than a copy in JavaScript that goes stale when a
+setting is retuned.
+
+No redirect is involved. The requirement is that a user asking for something
+unavailable is recovered and told; that never required a `3xx`, and doing it in
+one response spares a round trip. The client drops the rejected parameter from
+the address bar itself.
+
+**Performs no upstream I/O.** Every field is derived from the request and from
+configuration, so it answers at local speed even while upstream is down
+([ADR 17](adr/0017-image-fetch-timing.md)). It therefore cannot report that an
+image failed to load: that is not known until the bytes are fetched, so failed
+tiles are counted by the client.
+
+An id outside the catalogue returns `404`.
 
 ### `healthz` — liveness
 
@@ -97,55 +165,12 @@ working correctly.
 This route is deliberately independent of the gallery: it reads no query
 parameters and calls no service.
 
-## Planned endpoints
-
-Specified but **not yet implemented**. Listed here because the contract is the
-thing being designed against, and excluded from the enforcement table above
-because they are not yet routed.
-
-| Route name | Path | Response |
-| --- | --- | --- |
-| `api_image` | `/api/images/<id>` | `application/json` — one image |
-
 **There is no page-metadata endpoint.** A page of ids is arithmetic over the
 catalogue bound, which the shell already publishes, so the client derives it
 rather than fetching it
-([ADR 20](adr/0020-ids-are-derived-in-the-browser.md)). Loading a page is one
-document request followed by one `image` request per tile.
-
-### `api_image` — one image
-
-Describes a single image. It survives the removal of the page endpoint because
-it reports **resolved** values — what was actually served, which may differ from
-what was requested when a parameter fell back — and those cannot be derived from
-arithmetic. This is what the detail view's parameters panel renders (F4.4).
-
-| Parameter | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `size` | string | server default | A named size, or `WxH` pixels |
-| `grayscale` | boolean | false | Combines with `blur` |
-| `blur` | integer 0–10 | 0 | Combines with `grayscale` |
-
-```json
-{"id": 1, "url": "/img/1?size=large", "width": 800, "height": 800,
- "grayscale": false, "blur": 0}
-```
-
-`url` points at this application's `image` endpoint, never at the upstream
-provider, and is **complete**: it already carries whatever variation parameters
-are active, so it is used verbatim. The client never appends to it or assembles
-one from the sibling fields — the server builds it by reversing the route, which
-is what F5.2 and F5.4 require and what keeps a URL-construction rule out of
-JavaScript.
-
-**Performs no upstream I/O.** Every field is derived from the request and from
-configuration, so it answers at local speed even while upstream is down
-([ADR 17](adr/0017-image-fetch-timing.md)). It therefore cannot report that an
-image failed to load: that is not known until the bytes are fetched, so failed
-tiles are counted by the client and the degraded banner is rendered in the
-browser.
-
-An id outside the catalogue returns `404`.
+([ADR 20](adr/0020-ids-are-derived-in-the-browser.md)). Loading a gallery page
+is one document request followed by one `image` request per tile; opening a
+detail page is one document request plus one `api_image` call.
 
 ### `image` — image bytes
 

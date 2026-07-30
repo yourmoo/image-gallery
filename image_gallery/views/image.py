@@ -25,6 +25,8 @@ tiles, which it cannot infer from the bytes.
 
 from __future__ import annotations
 
+import logging
+
 from django.conf import settings
 from django.http import Http404, HttpResponse, JsonResponse
 from django.views import View
@@ -32,6 +34,8 @@ from django.views import View
 from ..cache import ImageCache
 from ..provider import PicsumProvider, UpstreamError
 from ..validation import validate_blur, validate_grayscale, validate_size
+
+logger = logging.getLogger("gallery.image")
 
 
 class ImageProxyView(View):
@@ -63,6 +67,15 @@ class ImageProxyView(View):
             if rejection is not None
         ]
         if rejections:
+            # The middleware will log the 400; this says which parameter caused
+            # it, which the status line alone cannot.
+            logger.info(
+                "rejected image parameters",
+                extra={
+                    "image_id": image_id,
+                    "rejected": [rejection.notice for rejection in rejections],
+                },
+            )
             return JsonResponse(
                 {"errors": [rejection.as_dict() for rejection in rejections]}, status=400
             )
@@ -90,10 +103,27 @@ class ImageProxyView(View):
             result = provider.fetch(
                 image_id=image_id, size=size, grayscale=grayscale, blur=blur
             )
-        except UpstreamError:
+        except UpstreamError as exc:
+            # The provider already logged why the fetch failed. What it cannot
+            # log is which tier the request lands on, because that is this
+            # view's decision — and it is the part that determines whether the
+            # user sees an image or a hole in the grid.
             stale = cache.get_stale(image_id=image_id, **variation)
             if stale is not None:
+                logger.warning(
+                    "serving stale image after upstream failure",
+                    extra={
+                        "image_id": image_id,
+                        "source": stale.source,
+                        "error": type(exc).__name__,
+                    },
+                )
                 return self._respond(stale)
+
+            logger.error(
+                "no image available, serving placeholder",
+                extra={"image_id": image_id, "error": type(exc).__name__},
+            )
             return self._placeholder()
 
         cache.store(result)
@@ -105,6 +135,30 @@ class ImageProxyView(View):
         # Which tier answered. The client counts degraded tiles from this; the
         # bytes alone cannot distinguish a placeholder from a real image.
         response["X-Image-Source"] = result.source
+
+        # Let the browser keep it. Without this the server cache saves the
+        # upstream fetch but not the round trip, so reloading a 50-tile page
+        # still issued 50 requests and moved ~1 MB — fast per request and slow
+        # to a person watching the grid fill in again.
+        #
+        # `immutable` is a statement of fact here rather than an optimistic
+        # hint: every parameter that changes the bytes is in the URL, and
+        # `seed=7` at a given size returns byte-identical bytes on every
+        # request (verified in docs/adr/0012-resilience-strategy.md). A cached
+        # image cannot become wrong with age, so there is nothing to revalidate
+        # and no correctness cost to a long max-age.
+        #
+        # `public`, because the bytes are the same for everyone: nothing here
+        # varies by user, and there is no user.
+        #
+        # A max-age of zero means "do not cache" rather than "cache for no
+        # time": `max-age=0, immutable` is a contradiction, and the e2e stack
+        # sets zero precisely because its scenarios need every request to reach
+        # the server where they can observe it.
+        max_age = settings.GALLERY_BROWSER_CACHE_MAX_AGE
+        response["Cache-Control"] = (
+            f"public, max-age={max_age}, immutable" if max_age > 0 else "no-store"
+        )
         return response
 
     @staticmethod
@@ -136,4 +190,10 @@ class ImageProxyView(View):
         """
         response = HttpResponse(b"", content_type="image/gif", status=504)
         response["X-Image-Source"] = "placeholder"
+        # Emphatically not cacheable, unlike every other tier. A real image is
+        # immutable and worth keeping for a week; this is a statement about one
+        # bad moment upstream. Letting a browser remember it would turn a
+        # transient outage into a tile that stays broken until the cache
+        # expires, long after the upstream recovered.
+        response["Cache-Control"] = "no-store"
         return response
