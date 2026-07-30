@@ -1,11 +1,11 @@
 """Fixtures for the browser-driven BDD suite.
 
-The suite runs against the stack in compose.e2e.yaml: the **production image**
+The suite runs against the stack in tests/compose.e2e.yaml: the **production image**
 serving through real gunicorn, pointed at a fake picsum.dev in its own
 container. Running the shipped image matters — each gunicorn worker holds its
 own LocMemCache, and a single-process harness cannot observe that at all.
 
-    docker compose -f compose.e2e.yaml up -d --build
+    docker compose -f tests/compose.e2e.yaml up -d --build
     pytest -c tests/pytest.ini -m e2e
 
 Because the fake runs in a different process, faults and the request log are
@@ -36,7 +36,9 @@ from playwright.sync_api import expect
 from pytest_bdd import given, parsers, then, when
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_FILE = REPO_ROOT / "compose.e2e.yaml"
+# Test apparatus, so it lives with the tests rather than beside the deployment
+# file at the root.
+COMPOSE_FILE = REPO_ROOT / "tests" / "compose.e2e.yaml"
 
 # Where compose.e2e.yaml publishes the two services.
 WEB_BASE_URL = os.environ.get("E2E_WEB_URL", "http://127.0.0.1:8081")

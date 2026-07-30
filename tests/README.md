@@ -7,6 +7,8 @@ tests/
   README.md             this guide — the single source for testing docs
   pytest.ini            pytest configuration (rootdir when passed via -c)
   .coveragerc           coverage configuration
+  compose.e2e.yaml      the stack the behavioural tier drives: the shipping
+                        image, pointed at the fake upstream, on 8081
   conftest.py           shared fixtures
   run.py                the entry point — one command per tier, owns every report path
   cucumber_html.py      renders Cucumber JSON to a readable scenario report
@@ -21,8 +23,15 @@ tests/
   reports/              generated coverage and report output (gitignored)
 ```
 
-The stack the behavioural tier runs against is defined in `compose.e2e.yaml` at
-the project root, next to the `compose.yaml` used for ordinary deployment.
+The stack the behavioural tier runs against is defined in
+`tests/compose.e2e.yaml`, here with the rest of the test apparatus rather than
+beside the root `compose.yaml` used for deployment. It builds the *shipping*
+image but wires it to a fake upstream with settings no real instance would want
+— browser caching off, retries zero — so it is test-only despite using the
+production Dockerfile.
+
+Its build contexts are written relative to this directory, so the file works
+from wherever compose is invoked.
 
 Because the configuration is not at the project root, **every command must pass
 `-c tests/pytest.ini`**. Run them from the project root.
@@ -209,10 +218,10 @@ for those alone rather than restarting the container.
 are not already up:
 
 ```powershell
-docker compose -f compose.e2e.yaml up -d --build
+docker compose -f tests/compose.e2e.yaml up -d --build
 $env:E2E_BASE_URL = 'http://127.0.0.1:8081'
 .\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini -m e2e --no-cov
-docker compose -f compose.e2e.yaml down -v
+docker compose -f tests/compose.e2e.yaml down -v
 ```
 
 | Service | Port | What it is |
@@ -260,7 +269,7 @@ it down, `--browser firefox` to switch engine (install it first with
 Requires the stack, since the e2e tests are included:
 
 ```powershell
-docker compose -f compose.e2e.yaml up -d --build
+docker compose -f tests/compose.e2e.yaml up -d --build
 $env:E2E_BASE_URL = 'http://127.0.0.1:8081'
 .\.venv\Scripts\python.exe -m pytest -c tests/pytest.ini
 ```
@@ -364,7 +373,7 @@ Needs the stack. `run.py e2e` starts pytest, writes the Cucumber JSON, and
 renders `scenarios.html` from it in one step:
 
 ```powershell
-docker compose -f compose.e2e.yaml up -d --build
+docker compose -f tests/compose.e2e.yaml up -d --build
 .\.venv\Scripts\python.exe tests/run.py e2e
 ```
 

@@ -6,7 +6,7 @@
 # starting either replaces the other.
 #
 #     docker compose up -d                          demo, on 8080
-#     docker compose -f compose.e2e.yaml up -d      testing, on 8081
+#     docker compose -f tests/compose.e2e.yaml up -d      testing, on 8081
 #
 # The upstream is an environment variable rather than something baked into the
 # image (docs/adr/0008-configuration-in-settings.md), which is what lets one

@@ -193,7 +193,7 @@ already draw — real bytes versus an admission of failure — is exactly the
 distinction the caching header needs to make.
 
 **Browser caching is disabled under test** (`GALLERY_BROWSER_CACHE_MAX_AGE: 0`
-in `compose.e2e.yaml`, which the view renders as `no-store`). Several scenarios
+in `tests/compose.e2e.yaml`, which the view renders as `no-store`). Several scenarios
 empty the server cache and then assert on what reached the fake upstream; an
 image held by the browser would satisfy the request without the server ever
 seeing it, and the assertion would read an empty log. The e2e stack needs to

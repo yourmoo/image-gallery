@@ -35,11 +35,20 @@ image_gallery/          application package (templates + static ship inside it)
   logging.py            the JSON formatter
   static/js/            derive.js and detail-render.js are pure and unit-tested;
                         gallery.js and detail-panel.js do the DOM
-tests/                  all test code and test config -> see tests/README.md
+tests/                  everything test-only, including its own compose stack
+  compose.e2e.yaml      the shipping image against a fake upstream, on 8081
+  e2e/fake_upstream/    a stand-in picsum, with a fault-injection control API
+  features/             the Gherkin specifications
+  unit/python, unit/js  the two unit tiers
 docs/                   longer-form documentation -> see docs/README.md
 Dockerfile              two-stage: builds a wheel, runtime installs it only
-compose.yaml            single-command run, host port 8080 -> gunicorn 8000
+compose.yaml            the deployment: host port 8080 -> gunicorn 8000
 ```
+
+Nothing under `tests/` reaches the image. The Dockerfile copies only
+`pyproject.toml` and `image_gallery/`, and `.dockerignore` excludes the rest so
+that stays true if a later `COPY . .` is added — the build context is about a
+kilobyte, and the running container has no `pytest` and no test files.
 
 ## Build
 
@@ -75,7 +84,7 @@ both purposes and they run side by side:
 | | Command | Upstream | Shows |
 | --- | --- | --- | --- |
 | **Demo** | `docker compose up -d` | picsum.dev | Real photographs, on 8080 |
-| **Testing** | `docker compose -f compose.e2e.yaml up -d` | a fake in its own container | A 1×1 placeholder, on 8081 |
+| **Testing** | `docker compose -f tests/compose.e2e.yaml up -d` | a fake in its own container | A 1×1 placeholder, on 8081 |
 
 The test stack's images are deliberately blank: the scenarios assert on the
 dimensions and filters the application *requested upstream*, never on pixels,

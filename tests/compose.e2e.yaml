@@ -6,9 +6,15 @@
 # LocMemCache, and a harness with one process cannot observe that.
 #
 # Run it with:
-#     docker compose -f compose.e2e.yaml up -d --build
+#     docker compose -f tests/compose.e2e.yaml up -d --build
 #     pytest -c tests/pytest.ini -m e2e
-#     docker compose -f compose.e2e.yaml down
+#     docker compose -f tests/compose.e2e.yaml down
+#
+# It lives under tests/ because it is test apparatus, not a deployment: it
+# builds the shipping image but points it at a fake upstream with settings no
+# production instance would want. `compose.yaml` at the root is the deployment
+# file. Build contexts below are therefore written relative to *this* file, so
+# the paths stay correct wherever compose is invoked from.
 #
 # The suite talks to `web` on 8081 and to the fake's control API on 8091, so
 # this stack runs alongside the ordinary compose.yaml without a port clash.
@@ -25,7 +31,7 @@ name: gallery-e2e
 services:
   fake-upstream:
     build:
-      context: ./tests/e2e/fake_upstream
+      context: ./e2e/fake_upstream
       dockerfile: Dockerfile
     image: image-gallery-fake-upstream:latest
     ports:
@@ -34,7 +40,10 @@ services:
 
   web:
     build:
-      context: .
+      # The repo root, one level up: the shipping image is built from the same
+      # Dockerfile a deployment uses, which is what makes this suite evidence
+      # about the artifact rather than about a test harness.
+      context: ..
       dockerfile: Dockerfile
     image: image-gallery:latest
     ports:

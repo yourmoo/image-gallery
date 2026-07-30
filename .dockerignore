@@ -1,20 +1,55 @@
+# What never reaches the build context.
+#
+# The Dockerfile only COPYs `pyproject.toml` and `image_gallery/`, so most of
+# this is belt-and-braces — but the context is still uploaded to the daemon on
+# every build, and an exclusion here is what stops a `COPY . .` added later from
+# silently shipping the test suite. The image carries no test scaffolding at
+# all, which is a guardrail the project states and `tests/e2e/conftest.py`
+# relies on when it calls the fake's control API test-only.
+
+# Version control and local tooling
 .git
 .gitignore
+.github
+.claude
 .venv
 venv
+.vscode
+.idea
+
+# Python build and bytecode artifacts
 __pycache__
 *.pyc
 *.pyo
-.pytest_cache
-.coverage
-htmlcov
-tests
-tests/reports
+*.pyd
 dist
 build
 *.egg-info
+
+# Everything to do with testing. `tests/` holds the suite, its fixtures, its
+# fake upstream, its own compose stack, and its generated reports.
+tests
+.pytest_cache
+.coverage
+coverage.xml
+htmlcov
+.tox
+.nox
+
+# Runtime output that must be produced inside the image rather than copied in:
+# collectstatic runs during the build, and the cache directory is a tmpfs mount
+# at run time.
+staticfiles
+.gallery-cache
+
+# Documentation and orchestration, none of which the application imports
+docs
 README.md
 django_image_gallery_assignment.md
 compose.yaml
 Dockerfile
 .dockerignore
+
+# Local environment overrides
+.env
+*.local
