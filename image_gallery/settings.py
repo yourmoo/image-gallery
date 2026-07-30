@@ -16,6 +16,7 @@ Django at this file in the first place and therefore cannot live inside it.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -35,6 +36,16 @@ def _env_int(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
+        # A typo'd environment variable silently becoming the default is a
+        # misconfiguration that only shows up as puzzling behaviour later.
+        # `warnings` rather than `logging`: this module is imported while
+        # Django is still assembling the settings that configure logging, so a
+        # logger here would write to a handler that does not exist yet.
+        warnings.warn(
+            f"{name}={raw!r} is not an integer; using {default}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return default
 
 
@@ -56,6 +67,10 @@ MIDDLEWARE = [
     # middleware and before CommonMiddleware, per WhiteNoise's documented order.
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
+    # Outermost of ours, innermost overall: it must wrap the views it logs, and
+    # anything it cannot wrap (a failure in the security or static middleware
+    # above) is not this application's request to report.
+    "image_gallery.middleware.RequestLoggingMiddleware",
 ]
 
 ROOT_URLCONF = "image_gallery.urls"
@@ -231,5 +246,30 @@ LOGGING = {
     "root": {
         "handlers": ["console"],
         "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        # The application's own logging: requests, cache tiering, upstream
+        # calls. Separately controllable because the useful setting is often
+        # "quiet everything, keep ours" — GALLERY_LOG_LEVEL=DEBUG surfaces
+        # cache hits and upstream timings without turning on Django's internals.
+        "gallery": {
+            "handlers": ["console"],
+            "level": os.environ.get("GALLERY_LOG_LEVEL", "INFO"),
+            # Already handled here; propagating would print each line twice.
+            "propagate": False,
+        },
+        "image_gallery": {
+            "handlers": ["console"],
+            "level": os.environ.get("GALLERY_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        # Django logs an unhandled exception here with its own traceback. The
+        # middleware has already logged it with the request context attached,
+        # so leaving this at ERROR would emit every failure twice.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "CRITICAL",
+            "propagate": False,
+        },
     },
 }
