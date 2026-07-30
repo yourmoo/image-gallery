@@ -25,7 +25,11 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: "*"
       DJANGO_LOG_LEVEL: "INFO"
-      GALLERY_CACHE_TTL: "300"
+      # Both windows, always together: RETENTION must exceed TTL or the
+      # stale-fallback tier can never fire. Pinning only TTL here once left the
+      # ordering to whatever the default happened to be.
+      GALLERY_CACHE_TTL: "3600"
+      GALLERY_CACHE_RETENTION: "86400"
       GALLERY_CACHE_MAX_ENTRIES: "1000"
       GALLERY_CACHE_CULL_FREQUENCY: "3"
       GALLERY_CACHE_DIR: "/dev/shm/gallery-cache"

@@ -100,8 +100,26 @@ DATABASES = {}
 # against a timestamp stored in the value. RETENTION must exceed TTL or the
 # stale-fallback tier can never fire.
 # See docs/adr/0012-resilience-strategy.md.
-GALLERY_CACHE_TTL = _env_int("GALLERY_CACHE_TTL", 300)
-GALLERY_CACHE_RETENTION = _env_int("GALLERY_CACHE_RETENTION", 3600)
+#
+# Both windows are long because the images are immutable: `seed=7` at a given
+# size returns byte-identical bytes on every request, so an aged entry is not a
+# worse answer, only an older copy of the same one. The cost of keeping it is
+# memory, which `GALLERY_CACHE_MAX_ENTRIES` bounds independently — so the TTL
+# is chosen against upstream traffic rather than against staleness.
+GALLERY_CACHE_TTL = _env_int("GALLERY_CACHE_TTL", 3600)
+GALLERY_CACHE_RETENTION = _env_int("GALLERY_CACHE_RETENTION", 86400)
+
+# How long a browser may keep an image without asking again. Separate from the
+# server's TTL and much longer, because the two solve different problems: the
+# server cache saves the *upstream fetch*, this saves the *round trip*. Without
+# it, reloading a 50-tile page reissued 50 requests that the server answered
+# from cache in about a millisecond each — fast, and still visibly slow to
+# someone watching the grid repaint.
+#
+# A week, and safe at that length only because the content is immutable and the
+# URL names every parameter that changes it. Nothing needs to be invalidated: a
+# different size or filter is a different URL.
+GALLERY_BROWSER_CACHE_MAX_AGE = _env_int("GALLERY_BROWSER_CACHE_MAX_AGE", 604800)
 
 # MAX_ENTRIES is a byte budget in disguise: the backend counts entries, but the
 # entries here are image bytes. The cap is derived from a target footprint

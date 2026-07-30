@@ -30,6 +30,13 @@ given a speculative ADR.
 | [18](0018-shared-cache-in-shared-memory.md) | Cache in tmpfs, shared by every worker | Replaces the per-process cache of **11**; corrects 11's claim that LocMemCache evicts LRU-style |
 | [19](0019-validation-errors-carry-a-usable-payload.md) | A 400 carries errors only; recovery happens at the document boundary | Amends **6**'s re-request; the client cannot send an invalid parameter, so a 400 in the browser is a client bug |
 | [20](0020-ids-are-derived-in-the-browser.md) | No page-metadata endpoint; the client derives the id range | Removes the `/api/images` of **17**; page arithmetic now runs on both sides and must agree |
+| [21](0021-observability-and-the-exception-boundary.md) | Structured request logging in middleware, which is also the exception boundary | Replaces gunicorn's access log; no traceback reaches a client even with `DEBUG=True` |
+| [22](0022-the-detail-page-joins-the-client.md) | The detail page is a shell fed by `api_image`; a rejected parameter is answered, not redirected | One rendering model, one copy of the wording; the redirect loop that prompted it is now impossible |
+
+**Amended:** [12](0012-resilience-strategy.md) — images are now served
+`Cache-Control: immutable` for a week and the server TTL raised to an hour, so
+a reload costs zero requests rather than fifty cheap ones. Placeholders are
+`no-store`.
 
 ## Format
 

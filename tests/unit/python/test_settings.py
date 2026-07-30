@@ -104,6 +104,17 @@ def test_retention_outlives_freshness():
     assert settings.GALLERY_CACHE_RETENTION > settings.GALLERY_CACHE_TTL
 
 
+def test_the_browser_may_keep_an_image_longer_than_the_server_prefers_it():
+    """The two windows solve different problems and are deliberately unequal.
+
+    The server's TTL decides when to *re-fetch from upstream*; the browser's
+    max-age decides when to *ask this application again*. Because the bytes are
+    immutable, the browser can safely hold one far longer than the server keeps
+    preferring its own copy — and that is what makes a reload free.
+    """
+    assert settings.GALLERY_BROWSER_CACHE_MAX_AGE > settings.GALLERY_CACHE_TTL
+
+
 def test_gallery_defaults_are_present():
     assert settings.GALLERY_DEFAULT_PAGE_SIZE == 10
     assert settings.GALLERY_UPSTREAM_BASE_URL.startswith("http")

@@ -157,3 +157,44 @@ priced as acceptable in [ADR 11](0011-cache-sizing.md).
 
 **Redis for a shared cache.** The correct tool for cross-worker sharing, and
 ruled out by brief line 17.
+
+## Amendment — the browser gets to keep them too (2026-07-30)
+
+The tiers above make a *repeat visit* cheap: the second request for an image is
+answered from the shared cache in about a millisecond instead of ~1.7 seconds
+upstream. They do nothing about the *round trip*, and that turned out to be
+what a user actually feels.
+
+Reported symptom: reloading the gallery was slow, and slow again the second
+time. Measured, the server was doing everything right — `x-image-source: cache`,
+1.1 ms — but the responses carried **no `Cache-Control`, no `ETag`, nothing**.
+So a browser had no permission to reuse an image it already held, and every
+reload of a 50-tile page reissued 50 requests and moved about a megabyte
+through six connections. Fast per request; visibly slow as a grid repainting.
+
+**Images are now served with `Cache-Control: public, max-age=604800,
+immutable`.** A week, and `immutable` as a statement of fact rather than a
+hint: this ADR already establishes that a given seed and size return
+byte-identical bytes, and every parameter that changes them is in the URL. A
+different size or filter is a different URL, so there is nothing to invalidate
+and no revalidation worth doing. The reload becomes free — zero requests, not
+fast ones.
+
+`GALLERY_CACHE_TTL` rose to one hour and retention to a day at the same time.
+That is the "long TTL" the alternatives section above already called *correct
+rather than a compromise*; the explicit stale tier is kept for the legibility
+reason given there, and a longer retention simply gives it more to work with.
+
+**The placeholder tier is exempt, emphatically.** It answers `no-store`. A
+placeholder is a statement about one bad moment upstream, not about the image,
+and a browser that cached it would turn a transient outage into a tile that
+stays broken for a week after upstream recovered. The distinction the tiers
+already draw — real bytes versus an admission of failure — is exactly the
+distinction the caching header needs to make.
+
+**Browser caching is disabled under test** (`GALLERY_BROWSER_CACHE_MAX_AGE: 0`
+in `compose.e2e.yaml`, which the view renders as `no-store`). Several scenarios
+empty the server cache and then assert on what reached the fake upstream; an
+image held by the browser would satisfy the request without the server ever
+seeing it, and the assertion would read an empty log. The e2e stack needs to
+observe every request, which is the opposite of what production wants.

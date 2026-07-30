@@ -63,6 +63,13 @@ services:
       GALLERY_CACHE_TTL: "300"
       GALLERY_CACHE_RETENTION: "3600"
       GALLERY_CACHE_DIR: "/dev/shm/gallery-cache"
+
+      # No browser caching under test. Scenarios empty the *server* cache and
+      # then assert on what reached the fake upstream; a browser holding an
+      # image would satisfy the request without the server ever seeing it, and
+      # the assertion would read an empty log. Production wants the opposite —
+      # see GALLERY_BROWSER_CACHE_MAX_AGE in settings.py.
+      GALLERY_BROWSER_CACHE_MAX_AGE: "0"
     # Shared across workers, in memory. See compose.yaml for the sizing.
     tmpfs:
       - /dev/shm/gallery-cache:size=128m
