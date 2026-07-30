@@ -26,18 +26,21 @@ grayscale control looks like. Requirement IDs (F2.x, F3.x, F4.x) are defined in
 | [`static/css/tokens.css`](../../image_gallery/static/css/tokens.css) | Every primitive value. Styles nothing. |
 | [`static/css/app.css`](../../image_gallery/static/css/app.css) | Components, built only from tokens. |
 
-## State: not yet build-ready
+## State: built
 
-`ui-notes.md` ends with a **Handover** section listing what must be resolved
-before templates are written. One item is settled — the interface is light only,
-dark mode is removed — and the rest are open. The largest is that
-`design-system.md` and `tokens.css` currently describe **different designs**,
-with a table of the diverging values and a decision recorded on which to take as
-intent.
+The interface these files describe is implemented. `ui-notes.md` ends with a
+**Reconciliation — resolved** section recording the three items that once
+blocked building: tokens a component referenced but the CSS never defined, a
+palette that was a different design rather than a drifted one, and markup
+written in Django template syntax for a client-rendered application
+([ADR 2](../adr/0002-client-side-rendering.md)). All three were resolved on
+2026-07-29, and `tokens.css` now agrees with `design-system.md`.
 
-The component blocks in `design-system.md` are written in Django template
-syntax, but the application is client-rendered
-([ADR 2](../adr/0002-client-side-rendering.md)) — that mismatch is Handover
-item 3 and is not yet resolved.
+The record is kept because the reasoning still matters — particularly that when
+the CSS on disk disagreed with `design-system.md`, the **document** turned out
+to be right, twice. Treat it as the intent when the two next diverge.
 
-Read that section before building anything from these files.
+Two things remain genuinely unspecified rather than merely unbuilt: the
+`--image-*` tokens under custom `WxH` sizes, and the empty state and unreachable
+page, neither of which the current application can reach. Both are described at
+the end of `ui-notes.md`.

@@ -48,7 +48,7 @@ Two tiers, with **different measures of completeness**. See
 | --- | --- | --- | --- |
 | `unit/python/` | Django modules and views | **Coverage ≥70%** | Imported code, Django test client |
 | `unit/js/` | The client's pure logic | **Coverage ≥90%** | Node's test runner, in a container |
-| `e2e/` | All Gherkin scenarios | **Every scenario bound** | A real browser and a running container |
+| `e2e/` | All Gherkin scenarios, plus the deployment checks | **Every scenario bound** | A real browser and a running container |
 
 `unit/` is one tier in two languages, not two tiers: both test modules in
 isolation and are measured by coverage. It is split because
@@ -73,11 +73,11 @@ scenarios therefore run in a browser.
 **Coverage is a unit-test measure, deliberately.** Browser tests exercise Django
 inside a container the in-process coverage tool cannot observe, so `unit/`
 carries the 70% gate alone. That is the right place for it: the service modules
-`validation.py`, `provider.py`, `cache.py`, and `gallery.py` — planned in
-[ADR 13](../docs/adr/0013-module-structure.md), not yet written — will be pure
-or near-pure and are more precisely tested directly than inferred through a
-browser. The JSON API is tested here too, through the Django test client:
-request and response assertions need no browser.
+`validation.py`, `provider.py`, `cache.py`, and `gallery.py`
+([ADR 13](../docs/adr/0013-module-structure.md)) are pure or near-pure and are
+more precisely tested directly than inferred through a browser. They currently
+sit at or near 100%, well clear of the gate. The JSON API is tested here too,
+through the Django test client: request and response assertions need no browser.
 
 **Gherkin completeness is the behavioural measure.** A coverage percentage says
 nothing about whether pagination was exercised. The equivalent guarantee is that
@@ -198,6 +198,7 @@ Where the code lives:
 | `e2e/test_variations_steps.py` | Steps unique to `variations.feature` |
 | `e2e/test_detail_steps.py` | Steps unique to `detail.feature` |
 | `e2e/test_health_steps.py` | Steps for `health.feature` |
+| `e2e/test_deployment_smoke.py` | The deployment checks below — not bound to any feature file |
 
 Shared steps sit in `conftest.py` because pytest-bdd resolves step definitions
 from there across every feature file — one definition of "the response status is
@@ -208,9 +209,11 @@ break a test. The hooks each module expects are listed in its docstring, and
 they are a contract: the templates have to provide them.
 
 **Scenario isolation.** An autouse fixture resets the fake's request log and
-faults before every scenario. Three scenarios also need an empty image cache —
-they are listed in `COLD_CACHE_SCENARIOS`, and the cache directory is emptied
-for those alone rather than restarting the container.
+faults before every scenario. Many scenarios also need an empty image cache —
+any that counts upstream calls or injects a fault, since a cached image is
+served without consulting the fake at all. They are listed by generated test
+name in `COLD_CACHE_SCENARIOS`, and the cache directory is emptied for those
+alone rather than restarting the container.
 
 ### The stack
 
@@ -275,8 +278,8 @@ $env:E2E_BASE_URL = 'http://127.0.0.1:8081'
 ```
 
 Expect this to take several minutes — the behavioural tier drives a real browser
-through 81 scenarios, and most of them currently fail while waiting for elements
-that do not exist yet.
+through 95 cases, and the cold-cache ones deliberately force real upstream
+fetches rather than reusing a warm cache.
 
 ## Reports
 
@@ -433,7 +436,7 @@ be bound to a step definition:
   --generate-missing --feature tests/features
 ```
 
-It names each unbound scenario with its file and line. All 81 are currently
+It names each unbound scenario with its file and line. All 59 are currently
 bound, so this reports nothing.
 
 A quicker check that the same thing still holds — collection fails on an unbound
@@ -450,39 +453,33 @@ every step is bound.
 
 ## Current results
 
-Measured 2026-07-29, before any gallery code exists.
+Measured 2026-07-30, with every Core Requirement implemented.
 
 | Suite | Result |
 | --- | --- |
-| Unit | 35 passed, 1 skipped |
-| Coverage | 94% (gate: 70%) |
-| Behavioural | 81 scenarios — 12 pass, 69 fail |
+| Python unit | 309 passed, 1 skipped |
+| Python coverage | 97% (gate: 70%) |
+| Behavioural | 95 Gherkin cases from 59 scenarios, all bound |
 
-**The behavioural tier is meant to be red.** The scenarios were written before
-the code, so they describe a gallery that has not been built. A scenario failing
-with `locator resolved to 0 elements` is the specification doing its job.
-
-Of the 12 that pass, only 6 mean anything: the four deployment smoke checks and
-the two health scenarios. The other 6 are **vacuous** — assertions about
-*absence* that an empty page satisfies:
-
-| Scenario | Passes because |
-| --- | --- |
-| The first page has no previous page | Nothing renders, so no link exists |
-| A valid page is not redirected | The placeholder returns 200 with no notice |
-| An image outside the collection is not found (×4) | `/images/101` 404s because no route exists |
-
-They become real assertions once there is a gallery to contradict them. Until
-then, treat 12 as the count to watch rather than a measure of progress.
+The behavioural count exceeds the scenario count because several scenarios are
+`Scenario Outline`s: one specification, one case per example row.
 
 Coverage is measured on the unit tier only. Browser tests exercise Django inside
 a container the in-process coverage tool cannot see, so including them would
 understate coverage rather than add to it.
 
+The one skip is deliberate rather than pending: `health.feature` tests the
+harness rather than a requirement, so the requirement-coverage check has nothing
+to assert about it.
+
 ## What is covered
 
 - Health endpoint status code and JSON payload
-- Landing page rendering
+- The grid, pagination, the count control, and the size and filter parameters
+- The image proxy, its cache tiering, and the resilience matrix
+- The detail view, its parameters panel, and the filters carried into it
+- The client's own logic — id arithmetic and the detail page's URL handling —
+  tested without a browser
 - Settings invariants: no relational database, a cache that can be shared
   between workers, gallery defaults, and that `settings.py` is the only module
   reading `os.environ`
@@ -492,7 +489,6 @@ understate coverage rather than add to it.
 - **The test suite's own integrity** — that every requirement has a scenario,
   every scenario names a real requirement and a build stage, and the cold-cache
   list has not been broken by a rename
-- BDD scenarios covering health and the landing page end to end
 - Browser-level verification against the running container, including that
   **every subresource the page requests returns below 400**
 
@@ -501,31 +497,30 @@ DOM content and so passed while the container served a 404 for its stylesheet �
 the page looked correct to the test and broken to a user. Any test that renders
 a page should assert on what the page *fetches*, not only on what it contains.
 
-**This is the whole reason the browser tier survives server-side rendering.**
-The Django test client renders templates in-process and never fetches a
-subresource, so it cannot catch that class of failure at all. The application
-now carries more of that surface than when the incident happened — two
-stylesheets with an `@import` between them, and image bytes served through a
-proxy endpoint.
+**This is the whole reason the browser tier exists.** The Django test client
+renders templates in-process and never fetches a subresource, so it cannot catch
+that class of failure at all. The application now carries far more of that
+surface than when the incident happened — two stylesheets with an `@import`
+between them, ES modules the browser loads directly, image bytes served through
+a proxy endpoint, and a detail page that renders nothing until its `fetch`
+returns.
 
-## Specified but not yet implemented
+## The specification
 
 `gallery.feature`, `variations.feature`, and `detail.feature` describe the Core
-Requirements ahead of the code. **Their step definitions exist and run**, so all
-81 scenarios are collected — and nearly all of them fail, which is the point.
-The gallery has not been built yet.
+Requirements. They were written **before** the code and drove it — a scenario
+failing with `locator resolved to 0 elements` was the specification doing its
+job, until the element existed.
 
 | Feature file | Requirements | Scenarios |
 | --- | --- | --- |
-| `gallery.feature` | F1.1–F1.3, F2.1–F2.7, F5.5, resilience | 26 |
-| `variations.feature` | F3.1–F3.6, custom dimensions | 32 |
-| `detail.feature` | F4.1–F4.4 | 17 |
+| `gallery.feature` | F1.1–F1.3, F2.1–F2.7, F5.5, resilience | 20 |
+| `variations.feature` | F3.1–F3.6, custom dimensions | 17 |
+| `detail.feature` | F4.1–F4.4 | 20 |
 | `health.feature` | the baseline harness | 2 |
 
-A handful pass without meaning anything: assertions about *absence* — "there is
-no link to a previous page", "an image outside the collection is not found" —
-are satisfied by a page that renders nothing and a route that does not exist.
-They become real assertions once there is a gallery to contradict them.
+Six of `variations`' scenarios and four of `detail`'s are outlines, which is why
+59 scenarios produce 95 executed cases.
 
 ### Selecting scenarios
 
@@ -543,14 +538,16 @@ Requirement ids use underscores (`F2_2`, not `F2.2`) because a dot is ambiguous
 inside a `-m` expression. Tags are declared in `pytest.ini`; `--strict-markers`
 turns a typo into a failed run rather than a scenario nobody can select.
 
-`tests/unit/test_requirement_coverage.py` keeps the tags honest: it fails if a
+`tests/unit/python/test_requirement_coverage.py` keeps the tags honest: it fails if a
 documented requirement has no scenario, if a scenario names a requirement that
 does not exist, if a tag is undeclared, or if a scenario carries no build stage.
 
 ### Build order
 
 The stages encode dependency — a scenario in stage N relies only on stages
-before it — so they are a sequence, not a grouping.
+before it — so they are a sequence, not a grouping. They record the order the
+application was built in; the tags remain useful for running a slice in
+isolation when changing one area.
 
 | Stage | Covers | Why here |
 | --- | --- | --- |
@@ -565,6 +562,7 @@ before it — so they are a sequence, not a grouping.
 | 9 | The detail view | Opened from the grid |
 | 10 | Filters and the parameters panel on detail | Needs variations carrying over |
 | 11 | The panel as a control surface | Needs the panel (10) before it can be made adjustable |
+| 12 | A control for custom pixel dimensions | The last slice: needs the control surface of 11 |
 
 `gallery.feature` comes first because it is the only feature depending on no
 other. `detail.feature` comes last: eight of its scenarios assert that filters
@@ -584,8 +582,8 @@ directly. F5.5 is the exception: caching is observable, because a repeated
 request must not produce a second upstream call, so it has a scenario.
 
 That exemption is recorded in `UNCOVERED_BY_DESIGN` in
-`tests/unit/test_requirement_coverage.py`, and a test fails if one of those four
-ever acquires a scenario — an exemption that stops being true should be removed,
+`tests/unit/python/test_requirement_coverage.py`, and a test fails if one of
+those four ever acquires a scenario — an exemption that stops being true should be removed,
 not left implying the requirement is untestable.
 
 Also out of scope until the features land: upstream picsum.dev integration and
@@ -594,6 +592,9 @@ tagged `@resilience`, covering per-tile failure, stale-cache fallback, and
 timeout behaviour per [ADR 12](../docs/adr/0012-resilience-strategy.md).
 
 ## Adding a BDD scenario
+
+The suite is complete — every Core Requirement has its scenarios and none are
+planned. This is the procedure should that change.
 
 1. Add or extend a `.feature` file in `features/`.
 2. Tag it with the requirement it covers and the build stage it belongs to —

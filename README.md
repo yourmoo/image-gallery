@@ -33,6 +33,7 @@ image_gallery/          application package (templates + static ship inside it)
   gallery.py, detail.py the page and size rules, as pure functions
   middleware.py         request logging, and the exception boundary
   logging.py            the JSON formatter
+  static/css/           tokens.css holds every value; app.css only references them
   static/js/            derive.js and detail-render.js are pure and unit-tested;
                         gallery.js and detail-panel.js do the DOM
 tests/                  everything test-only, including its own compose stack
@@ -225,6 +226,32 @@ fetches `/api/images/<id>`
 ([ADR 22](docs/adr/0022-the-detail-page-joins-the-client.md)). A rejected
 parameter is answered in that payload — the fallback applied, a notice
 explaining it — rather than by a redirect.
+
+**A two-file CSS layer: values, then components.** `static/css/tokens.css`
+defines every primitive — palette, spacing, type, radii, motion — and styles
+nothing. `static/css/app.css` builds the components and references those tokens
+rather than hardcoding a value. The split is what makes a change like retuning
+the spacing scale a one-file edit.
+
+Two of the token scales are gallery-specific rather than generic: `--image-*`
+names the three sizes of F3.1, and `--cell-*` sets the minimum grid cell that
+drives `repeat(auto-fill, minmax(...))`, so column count follows viewport width
+instead of breakpoints.
+
+Nothing in the palette is red — no state here is an unrecoverable error. The
+validation banner is cool because it reports what *you* asked for and fell back
+from; the degraded banner is warm because it reports what the *system* did when
+upstream was unavailable. A failed tile likewise must never read as a tile that
+is still loading, which is why it is a dashed `--warn-border` against a striped
+neutral placeholder.
+
+The design brief and the asset layer are documented in **[docs/ui/](docs/ui/)** —
+`ui-notes.md` for what the interface must do, `design-system.md` for what it is
+built from. Neither specifies behaviour; the Gherkin does that, and says nothing
+about appearance. Worth knowing when working in there: `tokens.css` had diverged
+from `design-system.md` on core values, and on both occasions the *document*
+turned out to be the accurate one. It was reconciled on 2026-07-29 and the two
+now agree.
 
 Testing strategy and its rationale are documented in
 [tests/README.md](tests/README.md).
